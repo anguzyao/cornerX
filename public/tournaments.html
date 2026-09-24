@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>我的賽程 — Corner X</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="shell">
+    <div class="back-row">
+      <a class="back-btn" href="/">←</a>
+      <div class="page-title" style="margin:0;">我的賽程</div>
+    </div>
+    <div id="list"><div class="loading">載入中…</div></div>
+  </div>
+
+  <div class="sticky-actions">
+    <div class="inner">
+      <a class="btn btn-primary" href="/create.html">＋ 建立新的賽程</a>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    (async function () {
+      const list = document.getElementById('list');
+      try {
+        const { tournaments } = await CX.api('/tournaments');
+        if (!tournaments.length) {
+          list.innerHTML = `<div class="empty-state"><div class="big">🌀</div>還沒有任何賽程<br>建立第一場比賽吧</div>`;
+          return;
+        }
+        list.innerHTML = tournaments
+          .map(
+            (t) => `<a class="list-item" href="/tournament.html?id=${encodeURIComponent(t.id)}">
+              <div class="body">
+                <div class="name">${CX.esc(t.name)}</div>
+                <div class="meta">${t.format === 'double' ? '雙淘汰' : '單淘汰'} · ${CX.fmtTime(t.updated_at)}</div>
+              </div>
+              <div class="badge ${t.status === 'done' ? 'done' : 'ongoing'}">${t.status === 'done' ? '已結束' : '進行中'}</div>
+            </a>`
+          )
+          .join('');
+      } catch (e) {
+        list.innerHTML = `<div class="error-box">${CX.esc(e.message)}</div>`;
+      }
+    })();
+  </script>
+</body>
+</html>

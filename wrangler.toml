@@ -1,0 +1,18 @@
+name = "corner-x"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# 靜態前端（public/ 內的 html/css/js）由 Worker 直接附掛 assets 提供
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# 交給 Worker 的 fetch() 處理 /api/* 與公開分享頁；其餘路徑先比對靜態檔案
+run_worker_first = ["/api/*", "/tournament/*", "/leaderboard/*"]
+
+# D1 資料庫綁定
+# 1) 先用 `wrangler d1 create corner-x-db` 建立資料庫
+# 2) 把它回傳的 database_id 貼到下面
+[[d1_databases]]
+binding = "DB"
+database_name = "corner-x-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
