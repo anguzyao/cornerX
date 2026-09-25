@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>建立新的賽程 — Corner X</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="shell">
+    <div class="back-row">
+      <a class="back-btn" href="/">←</a>
+      <div class="page-title" style="margin:0;">建立新的賽程</div>
+    </div>
+
+    <div class="field">
+      <label>賽事名稱</label>
+      <input type="text" id="f-name" placeholder="例如：中秋陀螺盃">
+    </div>
+
+    <div class="field">
+      <label>參賽者名單（一行一位，至少 2 位）</label>
+      <textarea id="f-players" placeholder="王小明&#10;陳小華&#10;張三&#10;李四"></textarea>
+      <div class="hint" id="player-count">已輸入 0 位參賽者</div>
+    </div>
+
+    <div class="field">
+      <label>賽制</label>
+      <div class="format-choice">
+        <div class="format-opt active" data-format="single">單淘汰</div>
+        <div class="format-opt" data-format="double">雙淘汰</div>
+      </div>
+      <div class="hint" id="format-hint">單淘汰：輸一場就出局。</div>
+    </div>
+
+    <div id="preview-box"></div>
+  </div>
+
+  <div class="sticky-actions">
+    <div class="inner">
+      <button class="btn btn-primary" id="btn-create">建立賽程</button>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    let format = 'single';
+    const nameEl = document.getElementById('f-name');
+    const playersEl = document.getElementById('f-players');
+    const countEl = document.getElementById('player-count');
+    const formatHint = document.getElementById('format-hint');
+    const preview = document.getElementById('preview-box');
+
+    function getPlayers() {
+      return playersEl.value
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
+    function refreshPreview() {
+      const players = getPlayers();
+      countEl.textContent = `已輸入 ${players.length} 位參賽者`;
+      if (players.length >= 2) {
+        let n = 1;
+        while (n < players.length) n *= 2;
+        const byes = n - players.length;
+        preview.innerHTML = `<div class="hint">預覽：共 ${players.length} 人，將產生 ${n} 個對戰位置${
+          byes ? `（${byes} 個輪空）` : ''
+        }。</div>`;
+      } else {
+        preview.innerHTML = '';
+      }
+    }
+    playersEl.addEventListener('input', refreshPreview);
+
+    document.querySelectorAll('.format-opt').forEach((el) => {
+      el.addEventListener('click', () => {
+        document.querySelectorAll('.format-opt').forEach((x) => x.classList.remove('active'));
+        el.classList.add('active');
+        format = el.dataset.format;
+        formatHint.textContent =
+          format === 'single' ? '單淘汰：輸一場就出局。' : '雙淘汰：輸兩場才會出局，敗部有機會逆轉晉級總決賽。';
+      });
+    });
+
+    document.getElementById('btn-create').addEventListener('click', async () => {
+      const name = nameEl.value.trim();
+      const players = getPlayers();
+      if (!name) return CX.toast('請輸入賽事名稱');
+      if (players.length < 2) return CX.toast('至少需要 2 位參賽者');
+      if (new Set(players).size !== players.length) return CX.toast('參賽者名稱不可重複');
+
+      const btn = document.getElementById('btn-create');
+      btn.disabled = true;
+      btn.textContent = '建立中…';
+      try {
+        const t = await CX.api('/tournaments', { method: 'POST', body: { name, players, format } });
+        location.href = `/tournament.html?id=${encodeURIComponent(t.id)}`;
+      } catch (e) {
+        CX.toast(e.message);
+        btn.disabled = false;
+        btn.textContent = '建立賽程';
+      }
+    });
+  </script>
+</body>
+</html>
