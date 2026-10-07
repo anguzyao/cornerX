@@ -640,23 +640,24 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
 /* ---------- Corner X brand / cold-blue + esports-orange theme ---------- */
 .brand { align-items:center; }
 .brand-logo {
-  width: 235px;
-  height: 48px;
-  flex: 0 0 auto;
+  width:235px;
+  height:48px;
+  flex:0 0 auto;
   display:flex;
   align-items:center;
   justify-content:center;
-  background:#fff;
-  border-radius:7px;
-  padding:6px 10px;
-  box-shadow:0 0 18px rgba(74,168,255,.08);
+  background:transparent;
+  border-radius:0;
+  padding:0;
+  box-shadow:none;
 }
-.brand-logo img { display:block; width:100%; height:100%; object-fit:contain; }
-.brand .sub { color:var(--text-muted); font-size:12px; margin-top:0; }
-.action-card.alt { border-left-color:var(--orange); }
-.btn-primary { background:linear-gradient(90deg,#4AA8FF,#63B4FF); color:#061017; box-shadow:0 0 22px rgba(74,168,255,.14); }
-.status-dot.ongoing, .badge.ongoing { color:var(--orange); border-color:rgba(255,107,44,.35); background:rgba(255,107,44,.08); }
-@media (max-width:560px) { .brand-logo { width:190px; height:42px; } }
+
+.brand-logo img {
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:contain;
+}
 
 /* ---------- Live match / match order ---------- */
 .match-card {
