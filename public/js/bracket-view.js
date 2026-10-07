@@ -109,13 +109,22 @@ function renderBracket(container, tData, opts) {
   let html = '';
 
   if (tData.champion) {
-    html += `<div class="champion-banner">
-      <div class="medal">🏆</div>
-      <div>
-        <div class="label">冠軍 CHAMPION</div>
-        <div class="name">${CX.esc(tData.champion)}</div>
-        ${tData.runnerUp ? `<div class="hint">亞軍：${CX.esc(tData.runnerUp)}</div>` : ''}
-      </div>
+    const podium = [
+      { key: 'runnerUp', rank: 2, label: '亞軍', en: 'RUNNER-UP', medal: '🥈', name: tData.runnerUp, cls: 'podium-2' },
+      { key: 'champion', rank: 1, label: '冠軍', en: 'CHAMPION', medal: '🏆', name: tData.champion, cls: 'podium-1' },
+      { key: 'thirdPlace', rank: 3, label: '季軍', en: '3RD PLACE', medal: '🥉', name: tData.thirdPlace, cls: 'podium-3' },
+      { key: 'fourthPlace', rank: 4, label: '殿軍', en: '4TH PLACE', medal: '④', name: tData.fourthPlace, cls: 'podium-4' },
+    ].filter((p) => p.name);
+
+    html += `<div class="podium-banner">
+      <div class="podium-title"><span>🏆</span><strong>最終名次</strong><small>FINAL RANKING</small></div>
+      <div class="podium-grid">${podium.map((p) => `
+        <div class="podium-card ${p.cls}">
+          <div class="podium-rank">${p.medal}</div>
+          <div class="podium-label">${p.label} <span>${p.en}</span></div>
+          <div class="podium-name">${CX.esc(p.name)}</div>
+          <div class="podium-number">NO.${p.rank}</div>
+        </div>`).join('')}</div>
     </div>`;
   }
 
