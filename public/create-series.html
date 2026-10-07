@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>建立活動 — Corner X</title><link rel="stylesheet" href="/css/style.css"></head>
+<body>
+<div class="shell">
+  <div class="topbar"><a class="back-btn" href="/">←</a><div><div class="eyebrow">CORNER X / SERIES</div><div class="page-title">建立活動</div></div></div>
+  <div class="panel hero-panel"><div class="eyebrow accent">NEW EVENT</div><h2>建立一個累積積分活動</h2><p>參賽者只需建立一次，後續每一場自動沿用。</p></div>
+  <div class="panel">
+    <div class="section-title">活動資訊</div>
+    <div class="field"><label>活動名稱</label><input id="name" type="text" placeholder="例如：角落陀螺爭霸戰"></div>
+    <div class="form-grid"><div class="field"><label>日期</label><input id="date" type="date"></div><div class="field"><label>地點</label><input id="location" type="text" placeholder="例如：我家"></div></div>
+  </div>
+  <div class="panel">
+    <div class="section-title">參賽者</div>
+    <div class="field"><label>一行一位</label><textarea id="players" placeholder="Angus&#10;小明&#10;阿偉&#10;小華"></textarea><div class="hint" id="count">0 位參賽者</div></div>
+  </div>
+  <div class="panel">
+    <div class="section-title">第一場賽制</div>
+    <div class="format-choice"><button class="format-opt active" data-format="single">單淘汰</button><button class="format-opt" data-format="double">雙淘汰</button></div>
+  </div>
+  <div class="panel">
+    <div class="section-title">積分規則</div>
+    <div class="point-grid">
+      <label>第 1 名<input id="p1" type="number" min="0" value="10"></label><label>第 2 名<input id="p2" type="number" min="0" value="7"></label>
+      <label>第 3 名<input id="p3" type="number" min="0" value="5"></label><label>第 4 名<input id="p4" type="number" min="0" value="3"></label>
+      <label>5–8 名<input id="p58" type="number" min="0" value="2"></label><label>9 名以上<input id="p9" type="number" min="0" value="1"></label>
+    </div>
+  </div>
+</div>
+<div class="sticky-actions"><div class="inner"><button class="btn btn-primary" id="create">建立活動</button></div></div>
+<script src="/js/app.js"></script>
+<script>
+let format='single';
+const playersEl=document.getElementById('players');
+playersEl.addEventListener('input',()=>{const n=playersEl.value.split('\n').map(x=>x.trim()).filter(Boolean);document.getElementById('count').textContent=`${n.length} 位參賽者`;});
+document.querySelectorAll('.format-opt').forEach(b=>b.onclick=()=>{document.querySelectorAll('.format-opt').forEach(x=>x.classList.remove('active'));b.classList.add('active');format=b.dataset.format;});
+document.getElementById('create').onclick=async()=>{
+ const players=playersEl.value.split('\n').map(x=>x.trim()).filter(Boolean), name=document.getElementById('name').value.trim();
+ if(!name)return CX.toast('請輸入活動名稱'); if(players.length<2)return CX.toast('至少需要 2 位參賽者'); if(new Set(players).size!==players.length)return CX.toast('參賽者名稱不可重複');
+ const body={name,eventDate:document.getElementById('date').value,location:document.getElementById('location').value.trim(),players,format,pointRules:{first:+p1.value,second:+p2.value,third:+p3.value,fourth:+p4.value,fifthToEighth:+p58.value,ninthPlus:+p9.value}};
+ const b=document.getElementById('create');b.disabled=true;b.textContent='建立中…';
+ try{const r=await CX.api('/series',{method:'POST',body});localStorage.setItem('cx_control_'+r.id,r.controlToken);location.href=r.controlUrl;}catch(e){CX.toast(e.message);b.disabled=false;b.textContent='建立活動';}
+};
+</script>
+</body></html>
