@@ -1,0 +1,20 @@
+{
+  "name": "corner-x",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Corner X — BEYBLADE X 賽程／排行榜管理工具",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute corner-x-db --file=./schema.sql",
+    "db:init:remote": "wrangler d1 execute corner-x-db --remote --file=./schema.sql",
+    "test": "node test/bracket.test.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "wrangler": "^3.90.0"
+  },
+  "dependencies": {
+    "hono": "^4.13.9"
+  }
+}
