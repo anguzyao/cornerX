@@ -165,25 +165,34 @@ function openScoreModal(match, onSubmit, onQuickWinner) {
   const mask = document.createElement('div');
   mask.className = 'modal-mask center';
   mask.innerHTML = `
-    <div class="modal-sheet" style="position:relative;">
-      <span class="modal-close">✕</span>
+    <div class="modal-sheet result-modal" style="position:relative;">
+      <button class="modal-close" type="button" aria-label="關閉">✕</button>
       <h3>記錄比賽結果</h3>
-      <div class="modal-vs">
-        <div class="side">
-          <div class="pname">${CX.esc(match.playerA)}</div>
-          <button class="quick-winner" id="cx-win-a">✓ ${CX.esc(match.playerA)} 獲勝</button>
-          <input type="number" inputmode="numeric" min="0" id="cx-score-a" value="" placeholder="比分（可不填）">
+      <div class="result-hint">快速記錄：直接按下勝者的「勝」即可完成比賽</div>
+      <div class="winner-grid">
+        <div class="winner-side">
+          <div class="winner-player">${CX.esc(match.playerA)}</div>
+          <button class="winner-big" id="cx-win-a" type="button" aria-label="${CX.esc(match.playerA)} 獲勝">
+            <span class="winner-big-mark">勝</span>
+            <span class="winner-big-text">${CX.esc(match.playerA)} 獲勝</span>
+          </button>
+          <div class="score-label">比分（可選）</div>
+          <input class="score-small" type="number" inputmode="numeric" min="0" id="cx-score-a" value="" placeholder="—">
         </div>
-        <div class="vs-mid">VS</div>
-        <div class="side">
-          <div class="pname">${CX.esc(match.playerB)}</div>
-          <button class="quick-winner" id="cx-win-b">✓ ${CX.esc(match.playerB)} 獲勝</button>
-          <input type="number" inputmode="numeric" min="0" id="cx-score-b" value="" placeholder="比分（可不填）">
+        <div class="result-vs">VS</div>
+        <div class="winner-side">
+          <div class="winner-player">${CX.esc(match.playerB)}</div>
+          <button class="winner-big" id="cx-win-b" type="button" aria-label="${CX.esc(match.playerB)} 獲勝">
+            <span class="winner-big-mark">勝</span>
+            <span class="winner-big-text">${CX.esc(match.playerB)} 獲勝</span>
+          </button>
+          <div class="score-label">比分（可選）</div>
+          <input class="score-small" type="number" inputmode="numeric" min="0" id="cx-score-b" value="" placeholder="—">
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn btn-secondary" id="cx-cancel">取消</button>
-        <button class="btn btn-primary" id="cx-submit">完成比賽</button>
+        <button class="btn btn-secondary" id="cx-cancel" type="button">取消</button>
+        <button class="btn btn-primary" id="cx-submit" type="button">用比分完成</button>
       </div>
     </div>`;
   document.body.appendChild(mask);
@@ -193,31 +202,38 @@ function openScoreModal(match, onSubmit, onQuickWinner) {
   });
   mask.querySelector('.modal-close').addEventListener('click', close);
   mask.querySelector('#cx-cancel').addEventListener('click', close);
+
   const submitWinner = async (winnerSlot) => {
     try {
-      if (typeof onQuickWinner === 'function') await onQuickWinner(winnerSlot);
-      else await onSubmit(winnerSlot === 'A' ? 1 : 0, winnerSlot === 'B' ? 1 : 0);
+      if (typeof onQuickWinner !== 'function') throw new Error('快速判勝功能尚未載入，請重新整理頁面後再試');
+      const btn = mask.querySelector(winnerSlot === 'A' ? '#cx-win-a' : '#cx-win-b');
+      btn.disabled = true;
+      await onQuickWinner(winnerSlot);
       close();
     } catch (e) {
-      CX.toast(e.message || '發生錯誤');
+      const btn = mask.querySelector(winnerSlot === 'A' ? '#cx-win-a' : '#cx-win-b');
+      if (btn) btn.disabled = false;
+      CX.toast(e.message || '記錄比賽失敗');
     }
   };
+
   mask.querySelector('#cx-win-a').addEventListener('click', () => submitWinner('A'));
   mask.querySelector('#cx-win-b').addEventListener('click', () => submitWinner('B'));
+
   mask.querySelector('#cx-submit').addEventListener('click', async () => {
     const aInput = mask.querySelector('#cx-score-a').value;
     const bInput = mask.querySelector('#cx-score-b').value;
     const a = Number(aInput);
     const b = Number(bInput);
     if (aInput === '' || bInput === '' || Number.isNaN(a) || Number.isNaN(b) || a === b) {
-      CX.toast('請輸入不同的比分，或直接點選上方的「獲勝」');
+      CX.toast('請輸入兩邊不同的比分，或直接按下勝者的「勝」');
       return;
     }
     try {
       await onSubmit(a, b);
       close();
     } catch (e) {
-      CX.toast(e.message || '發生錯誤');
+      CX.toast(e.message || '記錄比賽失敗');
     }
   });
 }
