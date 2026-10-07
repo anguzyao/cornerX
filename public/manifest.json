@@ -1,0 +1,16 @@
+{
+  "name": "Corner X｜線上賽程及排行榜系統",
+  "short_name": "Corner X",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080b10",
+  "theme_color": "#080b10",
+  "icons": [
+    {
+      "src": "/assets/corner-x-scoreboard-icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
