@@ -1,1 +1,53 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>我的活動 — Corner X</title><link rel="stylesheet" href="/css/style.css"></head><body><div class="shell"><div class="topbar"><a class="back-btn" href="/">←</a><div><div class="eyebrow">MY EVENTS</div><div class="page-title">我的活動</div></div></div><div id="list"><div class="loading">載入中…</div></div></div><div class="sticky-actions"><div class="inner"><a class="btn btn-secondary" href="/load-series.html">⇄ 讀取舊活動</a><a class="btn btn-primary" href="/create-series.html">＋ 建立新活動</a></div></div><script src="/js/app.js"></script><script>(async()=>{const el=document.getElementById('list');async function load(){try{const r=await CX.api('/series');if(!r.series.length){el.innerHTML='<div class="empty-state">還沒有活動<br>建立第一場吧。</div>';return}el.innerHTML=r.series.map((s,i)=>`<div class="list-item"><a class="list-open" href="#" data-i="${i}"><div class="body"><div class="name">${CX.esc(s.name)}</div><div class="meta">${CX.esc(s.event_date||'')}${s.location?' · '+CX.esc(s.location):''}</div></div><span class="badge ${s.status==='done'?'done':'ongoing'}">${s.status==='done'?'已完成':'進行中'}</span></a><button class="delete-event" data-i="${i}" title="刪除活動" aria-label="刪除活動">🗑</button></div>`).join('');el.querySelectorAll('.list-open').forEach(a=>a.onclick=(e)=>{e.preventDefault();const s=r.series[Number(a.dataset.i)];const t=localStorage.getItem('cx_control_'+s.id);if(t)location.href=`/series.html?id=${encodeURIComponent(s.id)}&token=${encodeURIComponent(t)}`;else{CX.toast('這台裝置沒有保存此活動的私人控制連結');}});el.querySelectorAll('.delete-event').forEach(btn=>btn.onclick=async()=>{const s=r.series[Number(btn.dataset.i)];if(!s)return;if(!confirm(`確定要刪除活動「${s.name}」嗎？\n\n活動的賽程、積分與歷史資料都會永久刪除，無法復原。`))return;try{await CX.api(`/series/${encodeURIComponent(s.id)}`,{method:'DELETE'});localStorage.removeItem('cx_control_'+s.id);CX.toast('活動已刪除');await load();}catch(e){CX.toast(e.message)}})}catch(e){el.innerHTML=`<div class="error-box">${CX.esc(e.message)}</div>`}}load()})()</script></body></html>
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>我的活動 — Corner X</title><link rel="stylesheet" href="/css/style.css"></head><body><div class="shell"><div class="topbar"><a class="back-btn" href="/">←</a><div><div class="eyebrow">MY EVENTS</div><div class="page-title">我的活動</div></div></div><div id="list"><div class="loading">載入中…</div></div></div><div class="sticky-actions"><div class="inner"><a class="btn btn-secondary" href="/load-series.html">⇄ 讀取舊活動</a><a class="btn btn-primary" href="/create-series.html">＋ 建立新活動</a></div></div><script src="/js/app.js"></script><script>
+const SAVED_KEY='cx_saved_activities';
+function getSaved(){try{const v=JSON.parse(localStorage.getItem(SAVED_KEY)||'[]');return Array.isArray(v)?v:[]}catch(e){return []}}
+function setSaved(v){localStorage.setItem(SAVED_KEY,JSON.stringify(v.slice(0,30)))}
+function fmtSavedTime(iso){return iso?`最近開啟：${CX.fmtTime(iso)}`:'這台裝置讀取過的活動' }
+function openSaved(s){
+  const token=localStorage.getItem('cx_control_'+s.id);
+  if(!token){CX.toast('這台裝置的控制權限已遺失，請重新輸入活動代碼');setTimeout(()=>location.href='/load-series.html',500);return;}
+  s.lastOpened=new Date().toISOString();
+  setSaved([s,...getSaved().filter(x=>x.id!==s.id)]);
+  location.href=`/series.html?id=${encodeURIComponent(s.id)}&token=${encodeURIComponent(token)}`;
+}
+(async()=>{
+  const el=document.getElementById('list');
+  try{
+    const r=await CX.api('/series');
+    const owned=r.series||[];
+    const saved=getSaved();
+    const ownedIds=new Set(owned.map(s=>s.id));
+    const remoteSaved=[];
+    for(const s of saved){
+      if(ownedIds.has(s.id))continue;
+      remoteSaved.push(s);
+    }
+    let html='';
+    if(owned.length){
+      html+=`<div class="section-title" style="margin:0 0 10px">我建立的活動</div>`;
+      html+=owned.map((s,i)=>`<div class="list-item"><a class="list-open" href="#" data-owner-i="${i}"><div class="body"><div class="name">${CX.esc(s.name)}</div><div class="meta">${CX.esc(s.event_date||'')}${s.location?' · '+CX.esc(s.location):''}</div></div><span class="badge ${s.status==='done'?'done':'ongoing'}">${s.status==='done'?'已完成':'進行中'}</span></a><button class="delete-event" data-owner-i="${i}" title="刪除活動" aria-label="刪除活動">🗑</button></div>`).join('');
+    }
+    if(remoteSaved.length){
+      html+=`<div class="section-title" style="margin:${owned.length?'24px':'0'} 0 10px">這台裝置讀取過的活動</div>`;
+      html+=remoteSaved.map((s,i)=>`<div class="list-item"><a class="list-open" href="#" data-saved-i="${i}"><div class="body"><div class="name">${CX.esc(s.name)}</div><div class="meta">${CX.esc(s.eventDate||'')}${s.location?' · '+CX.esc(s.location):''}${s.lastOpened?' · '+CX.esc(fmtSavedTime(s.lastOpened)):''}</div></div><span class="badge ${s.status==='done'?'done':'ongoing'}">${s.status==='done'?'已完成':'已讀取'}</span></a><button class="delete-saved" data-saved-i="${i}" title="從這台裝置移除" aria-label="從這台裝置移除">✕</button></div>`).join('');
+    }
+    if(!html)html='<div class="empty-state">還沒有活動<br>建立第一場，或輸入活動代碼讀取舊活動吧。</div>';
+    el.innerHTML=html;
+    el.querySelectorAll('[data-owner-i]').forEach(a=>a.onclick=async e=>{
+      e.preventDefault();
+      const s=owned[Number(a.dataset.ownerI)];
+      if(!s)return;
+      const t=localStorage.getItem('cx_control_'+s.id);
+      if(t)location.href=`/series.html?id=${encodeURIComponent(s.id)}&token=${encodeURIComponent(t)}`;
+      else CX.toast('這台裝置沒有保存此活動的私人控制連結');
+    });
+    el.querySelectorAll('.delete-event').forEach(btn=>btn.onclick=async()=>{
+      const s=owned[Number(btn.dataset.ownerI)];if(!s)return;
+      if(!confirm(`確定要刪除活動「${s.name}」嗎？\n\n活動的賽程、積分與歷史資料都會永久刪除，無法復原。`))return;
+      try{await CX.api(`/series/${encodeURIComponent(s.id)}`,{method:'DELETE'});localStorage.removeItem('cx_control_'+s.id);setSaved(getSaved().filter(x=>x.id!==s.id));CX.toast('活動已刪除');location.reload();}catch(e){CX.toast(e.message)}
+    });
+    el.querySelectorAll('[data-saved-i]').forEach(a=>a.onclick=e=>{e.preventDefault();const s=remoteSaved[Number(a.dataset.savedI)];if(s)openSaved(s);});
+    el.querySelectorAll('.delete-saved').forEach(btn=>btn.onclick=()=>{const i=Number(btn.dataset.savedI);const s=remoteSaved[i];if(!s)return;if(!confirm(`從這台裝置的「我的活動」移除「${s.name}」？\n\n不會刪除雲端活動。`))return;setSaved(getSaved().filter(x=>x.id!==s.id));CX.toast('已從這台裝置移除');location.reload();});
+  }catch(e){el.innerHTML=`<div class="error-box">${CX.esc(e.message)}</div>`}
+})();
+</script></body></html>
