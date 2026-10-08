@@ -25,11 +25,15 @@
 /* V23 — match calling */
 .call-panel{margin-top:14px;border:1px solid rgba(255,166,0,.28);background:linear-gradient(180deg,rgba(255,166,0,.08),rgba(255,166,0,.03));border-radius:14px;padding:16px}
 .call-kicker{font-size:11px;letter-spacing:.12em;color:#f7b84b;font-weight:800}
-.call-match-no{font-size:24px;font-weight:900;margin-top:4px}
-.call-players{font-size:18px;font-weight:800;margin:6px 0 12px}
-.call-status{font-size:13px;color:var(--muted,#9aa7b8);margin-bottom:10px}
-.call-btn{width:100%;min-height:46px;font-size:16px;font-weight:900}
+.call-list{display:grid;gap:10px;margin-top:12px}
+.call-item{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid rgba(255,255,255,.08);background:rgba(7,12,20,.34);border-radius:12px;padding:12px}
+.call-item-main{min-width:0;flex:1}
+.call-match-no{font-size:21px;font-weight:900;margin-top:0}
+.call-players{font-size:17px;font-weight:800;margin:4px 0 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.call-status{font-size:13px;color:var(--muted,#9aa7b8)}
+.call-btn{width:118px;min-height:44px;font-size:15px;font-weight:900;flex:0 0 auto}
 .call-btn.called{background:rgba(255,166,0,.12);border:1px solid rgba(255,166,0,.5);color:#ffc45c}
+@media(max-width:560px){.call-item{align-items:stretch;flex-direction:column}.call-btn{width:100%}.call-players{white-space:normal}}
 </style></head>
 <body><div class="shell"><div class="topbar"><a class="back-btn" href="/">←</a><div><div class="eyebrow">PRIVATE CONTROL</div><div class="page-title" id="title">活動</div></div><button class="icon-btn" id="share">↗</button></div><div id="app"><div class="loading">載入中…</div></div></div>
 <script src="/js/app.js"></script><script src="/js/bracket-view.js"></script>
@@ -113,26 +117,30 @@ function getCallCandidates(r){
 }
 function renderCallPanel(r){
   const box=document.createElement('div'); box.className='call-panel';
-  const ready=getCallCandidates(r);
-  const target=ready[1]||ready[0]||null;
-  const existing=r?.data?.call||null;
-  const called=existing&&target&&existing.matchId===target.id;
-  if(!target){
-    box.innerHTML='<div class="call-kicker">📢 MATCH CALL</div><div class="call-status">目前沒有可叫號的比賽。</div>';
+  const ready=getCallCandidates(r).slice(0,3);
+  const calls=Array.isArray(r?.data?.calls)?r.data.calls:(r?.data?.call?[r.data.call]:[]);
+  if(!ready.length){
+    box.innerHTML='<div class="call-kicker">📢 MATCH CALL · 選手叫號</div><div class="call-status">目前沒有可叫號的比賽。</div>';
     return box;
   }
-  const order=callMatchOrder(r.data.matches).findIndex(m=>m.id===target.id)+1;
-  box.innerHTML=`<div class="call-kicker">📢 MATCH CALL · 選手叫號</div><div class="call-match-no">第 ${order} 場</div><div class="call-players">${CX.esc(target.playerA)}　VS　${CX.esc(target.playerB)}</div><div class="call-status">${called?'已叫號，可再次播送。':'下一場準備就緒，可通知選手。'}</div><button class="btn btn-primary call-btn ${called?'called':''}" id="call-match">${called?'🔊 再次叫號':'📢 叫號'}</button>`;
-  box.querySelector('#call-match').onclick=async()=>{
-    const btn=box.querySelector('#call-match'); btn.disabled=true;
-    try{
-      await api(`/series/${id}/rounds/${r.id}/call`,{method:'POST',body:{matchId:target.id,matchNo:order,playerA:target.playerA,playerB:target.playerB}});
-      await load(); CX.toast('已發送叫號');
-    }catch(e){btn.disabled=false;CX.toast(e.message)}
-  };
+  box.innerHTML=`<div class="call-kicker">📢 MATCH CALL · 接下來 3 場</div><div class="call-list"></div>`;
+  const list=box.querySelector('.call-list');
+  ready.forEach((target,idx)=>{
+    const order=callMatchOrder(r.data.matches).findIndex(m=>m.id===target.id)+1;
+    const called=calls.some(c=>c&&c.matchId===target.id);
+    const item=document.createElement('div'); item.className='call-item';
+    item.innerHTML=`<div class="call-item-main"><div class="call-match-no">第 ${order} 場</div><div class="call-players">${CX.esc(target.playerA)}　VS　${CX.esc(target.playerB)}</div><div class="call-status">${called?'已叫號，可再次播送。':'等待叫號。'}</div></div><button class="btn btn-primary call-btn ${called?'called':''}">${called?'🔊 再次叫號':'📢 叫號'}</button>`;
+    item.querySelector('.call-btn').onclick=async()=>{
+      const btn=item.querySelector('.call-btn'); btn.disabled=true;
+      try{
+        await api(`/series/${id}/rounds/${r.id}/call`,{method:'POST',body:{matchId:target.id,matchNo:order,playerA:target.playerA,playerB:target.playerB}});
+        await load(); CX.toast(`第 ${order} 場已發送叫號`);
+      }catch(e){btn.disabled=false;CX.toast(e.message)}
+    };
+    list.appendChild(item);
+  });
   return box;
 }
-
 function renderRound(el,r,rounds,active){
   if(!r){el.innerHTML='<div class="empty-state">尚未建立賽程</div>';return}
   const editable=r.status!=='done';
