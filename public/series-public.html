@@ -22,6 +22,19 @@
 .overall-row:not(.top-1):not(.top-2):not(.top-3):not(.top-4) .overall-rank { color:var(--text); }
 @media (max-width:420px) { .overall-row { grid-template-columns:44px 1fr auto; min-height:70px; padding:11px 12px; } .overall-rank { font-size:25px; } .overall-row.top-1 .overall-rank::before, .overall-row.top-2 .overall-rank::before, .overall-row.top-3 .overall-rank::before { top:-11px; font-size:18px; } }
 
+/* V25 — spectator voice setup gate */
+.voice-gate{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(3,7,13,.96);backdrop-filter:blur(10px)}
+.voice-gate.hidden{display:none}
+.voice-gate-card{width:min(520px,100%);text-align:center;border:1px solid rgba(255,174,0,.55);border-radius:22px;padding:34px 24px;background:linear-gradient(180deg,#171f2b,#0b111a);box-shadow:0 0 0 1px rgba(255,174,0,.1),0 0 55px rgba(255,166,0,.16)}
+.voice-gate-icon{font-size:52px;line-height:1;margin-bottom:12px}
+.voice-gate-title{font-size:24px;font-weight:1000;margin-bottom:8px}
+.voice-gate-sub{font-size:14px;line-height:1.7;color:#aeb9c8;margin:0 auto 20px;max-width:420px}
+.voice-gate-status{min-height:24px;font-size:14px;font-weight:800;color:#f7b84b;margin:12px 0}
+.voice-gate-enter{width:100%;min-height:48px;font-size:16px;font-weight:900}
+.voice-gate-enter:disabled{opacity:.45;cursor:not-allowed}
+.voice-gate-note{font-size:12px;color:#7f8da0;margin-top:14px;line-height:1.6}
+@media(max-width:520px){.voice-gate{padding:18px}.voice-gate-card{padding:28px 18px}.voice-gate-title{font-size:22px}}
+
 /* V23 — spectator match call */
 .call-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(3,7,13,.86);backdrop-filter:blur(8px);animation:callFadeIn .22s ease}
 .call-overlay.hidden{display:none}
@@ -32,30 +45,58 @@
 @keyframes callPulse{from{transform:scale(1);box-shadow:0 0 0 1px rgba(255,174,0,.12),0 0 35px rgba(255,166,0,.14)}to{transform:scale(1.012);box-shadow:0 0 0 1px rgba(255,174,0,.2),0 0 65px rgba(255,166,0,.28)}}
 @media(max-width:520px){.call-modal{padding:28px 18px}.call-no{font-size:34px}.call-player{font-size:23px}}
 </style></head>
-<body><div class="shell public-shell"><div class="brand"><div class="brand-logo"><img src="/assets/corner-x-logo.png" alt="Corner X"></div><div class="brand-copy"><div class="brand-name">Corner X</div><div class="sub">線上賽程及排行榜系統</div></div></div><div id="app"><div class="loading">載入中…</div></div></div>
+<body><div id="voice-gate" class="voice-gate"><div class="voice-gate-card"><div class="voice-gate-icon">🔊</div><div class="voice-gate-title">現場叫號語音</div><p class="voice-gate-sub">進入觀眾模式前，請先播放測試語音。請確認本裝置可以聽到聲音，之後才能進入觀眾畫面。</p><button class="btn btn-primary voice-gate-test" id="voice-gate-test">🔊 播放測試語音</button><div class="voice-gate-status" id="voice-gate-status">尚未測試</div><button class="btn btn-secondary voice-gate-enter" id="voice-gate-enter" disabled>進入觀眾模式</button><div class="voice-gate-note">測試內容：「叫號語音已啟用。」<br>若沒有聲音，請先確認裝置音量與靜音模式。</div></div></div><div class="shell public-shell"><div class="brand"><div class="brand-logo"><img src="/assets/corner-x-logo.png" alt="Corner X"></div><div class="brand-copy"><div class="brand-name">Corner X</div><div class="sub">線上賽程及排行榜系統</div></div></div><div id="app"><div class="loading">載入中…</div></div></div>
 <script src="/js/app.js"></script><script src="/js/bracket-view.js"></script><script>
 const slug=location.pathname.split('/').filter(Boolean).pop(), app=document.getElementById('app'); let state=null; let currentTab='overall';
 let firstPublicLoad=true;
 const callStorageKey='cx_last_call_'+slug;
-let speechEnabled=localStorage.getItem('cx_call_voice_'+slug)==='1';
+let speechEnabled=false;
+let voiceTestPassed=false;
 
-function enableCallVoice(){
-  speechEnabled=true; localStorage.setItem('cx_call_voice_'+slug,'1');
-  const btn=document.getElementById('voice-enable'); if(btn) btn.textContent='🔊 叫號聲音已啟用';
+function pickChineseVoice(){
+  if(!('speechSynthesis' in window)) return null;
+  const voices=window.speechSynthesis.getVoices();
+  return voices.find(v=>/^zh-TW/i.test(v.lang))||voices.find(v=>/^zh/i.test(v.lang))||null;
+}
+function speakText(text,onend){
+  if(!('speechSynthesis' in window)) return false;
   try{
-    const u=new SpeechSynthesisUtterance('叫號聲音已啟用。');
-    u.lang='zh-TW'; u.rate=.82; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
-  }catch(e){}
+    const u=new SpeechSynthesisUtterance(text);
+    const voice=pickChineseVoice();
+    if(voice) u.voice=voice;
+    u.lang=voice?.lang||'zh-TW'; u.rate=.82; u.pitch=1;
+    if(onend) u.onend=onend;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+    return true;
+  }catch(e){return false;}
+}
+function runVoiceTest(){
+  const status=document.getElementById('voice-gate-status');
+  const enter=document.getElementById('voice-gate-enter');
+  const ok=speakText('叫號語音已啟用。',()=>{
+    voiceTestPassed=true; speechEnabled=true;
+    status.textContent='✓ 測試完成，請確認你有聽到聲音。';
+    enter.disabled=false;
+  });
+  if(!ok){status.textContent='目前裝置不支援語音播放，請改用支援語音的瀏覽器。';return;}
+  status.textContent='🔊 正在播放測試語音…';
+}
+function enterPublicMode(){
+  if(!voiceTestPassed)return;
+  const gate=document.getElementById('voice-gate');
+  if(gate)gate.classList.add('hidden');
+  load();
+}
+function enableCallVoice(){
+  speechEnabled=true;
+  const btn=document.getElementById('voice-enable'); if(btn) btn.textContent='🔊 叫號聲音已啟用';
+  runVoiceTest();
 }
 function speakCall(call){
-  if(!speechEnabled || !('speechSynthesis' in window)) return;
+  if(!speechEnabled)return;
   const text=`第${call.matchNo}場。${call.playerA}、${call.playerB}。請準備比賽。`;
-  const voices=window.speechSynthesis.getVoices();
-  const u=new SpeechSynthesisUtterance(text);
-  const voice=voices.find(v=>/^zh-TW/i.test(v.lang))||voices.find(v=>/^zh/i.test(v.lang));
-  if(voice)u.voice=voice;
-  u.lang=voice?.lang||'zh-TW'; u.rate=.82; u.pitch=1;
-  window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+  speakText(text);
 }
 function showCall(call){
   const overlay=document.getElementById('call-overlay'); if(!overlay)return;
@@ -71,7 +112,7 @@ function checkCall(){
   if(firstPublicLoad){localStorage.setItem(callStorageKey,call.id);return;}
   if(call.id!==last){localStorage.setItem(callStorageKey,call.id);showCall(call);}
 }
-document.addEventListener('click',e=>{if(e.target.closest('#voice-enable'))enableCallVoice();});
+document.addEventListener('click',e=>{if(e.target.closest('#voice-enable'))enableCallVoice();if(e.target.closest('#voice-gate-test'))runVoiceTest();if(e.target.closest('#voice-gate-enter'))enterPublicMode();});
 
 function medal(rank){return ['🥇','🥈','🥉','4️⃣'][rank-1]||rank;}
 function render(){const rounds=state.rounds||[],active=rounds.find(r=>r.status!=='done')||rounds[rounds.length-1], rows=state.overall||[]; app.innerHTML=`<div class="live-head"><div><div class="eyebrow accent">${state.status==='done'?'EVENT COMPLETE':'LIVE NOW'}</div><h2>${CX.esc(state.name)}</h2><div class="muted">${CX.esc(state.eventDate||'')}${state.location?' · '+CX.esc(state.location):''}</div></div><div class="status-dot ${state.status==='done'?'done':''}">${state.status==='done'?'已結束':'LIVE'}</div></div><div class="tabbar"><button class="tab active" data-tab="overall">積分排行榜</button><button class="tab" data-tab="live">即時賽程</button>${rounds.length?'<button class="tab" data-tab="rounds">各場結果</button>':''}</div><div id="tab-content"></div><div class="readonly-banner">◉ 唯讀觀眾模式 · 資料即時更新 <button class="btn btn-secondary btn-sm voice-toggle" id="voice-enable">🔊 啟用叫號聲音</button></div><div id="call-overlay" class="call-overlay hidden"></div>`;
@@ -80,5 +121,6 @@ function overall(el,rows,rounds){el.innerHTML=`<div class="panel"><div class="se
 
 function live(el,r){if(!r){el.innerHTML='<div class="empty-state">尚未開始比賽</div>';return}el.innerHTML=`<div class="panel"><div class="round-head"><div><div class="eyebrow">ROUND ${r.round_no}</div><h3>${CX.esc(r.name)}</h3></div><span class="badge ${r.status==='done'?'done':'ongoing'}">${r.status==='done'?'已完成':'進行中'}</span></div><div id="bracket"></div></div>`;CXBracket.renderBracket(document.getElementById('bracket'),r.data,{editable:false});}
 function results(el,rounds){el.innerHTML=rounds.slice().reverse().map(r=>`<div class="panel"><div class="round-head"><div><div class="eyebrow">ROUND ${r.round_no}</div><h3>${CX.esc(r.name)}</h3></div><span class="badge ${r.status==='done'?'done':'ongoing'}">${r.status==='done'?'已完成':'進行中'}</span></div>${r.points?.length?`<div class="points-list">${r.points.slice().sort((a,b)=>a.rank-b.rank).map(x=>`<div class="point-row"><span class="rank">${medal(x.rank)}</span><span class="player">${CX.esc(x.name||'')}</span><strong>+${x.points}</strong></div>`).join('')}</div>`:'<div class="hint">本場尚未結算積分</div>'}</div>`).join('')}
-async function load(){try{state=await CX.api('/public/series/'+encodeURIComponent(slug));document.title=state.name+' — Corner X';render();checkCall();firstPublicLoad=false;const btn=document.getElementById('voice-enable');if(btn&&speechEnabled)btn.textContent='🔊 叫號聲音已啟用'}catch(e){app.innerHTML=`<div class="error-box">${CX.esc(e.message)}</div>`}} load();setInterval(load,5000);
+async function load(){try{state=await CX.api('/public/series/'+encodeURIComponent(slug));document.title=state.name+' — Corner X';render();checkCall();firstPublicLoad=false;const btn=document.getElementById('voice-enable');if(btn&&speechEnabled)btn.textContent='🔊 叫號聲音已啟用'}catch(e){app.innerHTML=`<div class="error-box">${CX.esc(e.message)}</div>`}}
+setInterval(()=>{if(voiceTestPassed&&!document.getElementById('voice-gate')?.classList.contains('hidden'))return;if(voiceTestPassed)load();},5000);
 </script></body></html>
