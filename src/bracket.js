@@ -75,11 +75,25 @@ function createBracket(players, format, options = {}) {
   }
 
   const seedSlots = buildSeedOrder(N);
-  const seededPlayers = shouldShuffle ? shuffle(players) : players.slice();
-  const bySeed = new Map();
-  seededPlayers.forEach((player, index) => bySeed.set(index + 1, player));
-  for (const seed of seedSlots) seedOrder.push(bySeed.get(seed) || BYE);
-  const seeded = seedOrder;
+  let seeded;
+
+  // 手動調整模式可以直接指定「實際第一輪籤位」；
+  // 這樣不會再次經過 Seed 排列，並且能保留原本 BYE 的位置。
+  if (Array.isArray(options.slotOrder)) {
+    if (options.slotOrder.length !== N) {
+      throw new Error('手動調整的籤位數量不正確');
+    }
+    seeded = options.slotOrder.slice();
+  } else if (options.preserveSlotOrder) {
+    seeded = players.slice();
+    while (seeded.length < N) seeded.push(BYE);
+  } else {
+    const seededPlayers = shouldShuffle ? shuffle(players) : players.slice();
+    const bySeed = new Map();
+    seededPlayers.forEach((player, index) => bySeed.set(index + 1, player));
+    for (const seed of seedSlots) seedOrder.push(bySeed.get(seed) || BYE);
+    seeded = seedOrder;
+  }
 
   const matches = [];
   const k = Math.log2(N); // WB 輪數

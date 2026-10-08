@@ -446,8 +446,25 @@ app.post('/api/series/:id/rounds/:roundId/reseed', async (c) => {
   }
 
   let data;
-  try { data = createBracket(players, round.format, { shuffle: mode !== 'manual' }); }
-  catch (e) { return jsonError(c, 400, e.message); }
+  try {
+    if (mode === 'manual') {
+      // 手動調整只交換「原本有選手的籤位」，BYE 位置完全保留。
+      // 前端送回的是重新排序後的選手名單，不包含 BYE。
+      const currentSlots = (current.matches || [])
+        .filter((m) => m.stage === 'WB' && m.round === 1)
+        .sort((a, b) => a.index - b.index)
+        .flatMap((m) => [m.playerA, m.playerB]);
+      const queue = players.slice();
+      const slotOrder = currentSlots.map((slot) => slot === '__BYE__' ? '__BYE__' : queue.shift());
+      data = createBracket(participantNames, round.format, {
+        shuffle: false,
+        preserveSlotOrder: true,
+        slotOrder,
+      });
+    } else {
+      data = createBracket(players, round.format, { shuffle: true });
+    }
+  } catch (e) { return jsonError(c, 400, e.message); }
 
   const now = new Date().toISOString();
   await c.env.DB.batch([
