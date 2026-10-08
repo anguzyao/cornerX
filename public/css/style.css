@@ -957,3 +957,36 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
   .cx-live-grid { grid-template-columns:1fr; }
   .cx-live-card.is-next { opacity:.9; }
 }
+
+
+/* ---------- V19：統一單排賽程 + Live Control 橘黃閃爍 ---------- */
+/* 所有裝置都使用同一套原始 bracket 欄位：輪次由左至右、比賽由上往下，超寬內容可橫向滑動。 */
+.cx-tree-desktop,
+.cx-tree-mobile { display:none !important; }
+.bracket-unified { display:block; }
+.bracket-unified .bracket-scroll { overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+.bracket-unified .bracket { min-width:max-content; }
+
+/* Live Control：目前進行中的比賽使用橘黃色閃爍框線。 */
+.cx-live-card.is-current {
+  border:2px solid #ffd166;
+  box-shadow:0 0 0 1px rgba(255,209,102,.28), 0 0 18px rgba(255,107,44,.18), 0 0 34px rgba(255,209,102,.10);
+  animation:cx-live-current-pulse 1.15s ease-in-out infinite;
+}
+.cx-live-card.is-current .cx-live-kicker { color:#ffd166; }
+.cx-live-card.is-current .cx-live-order { color:#ffd166; }
+
+@keyframes cx-live-current-pulse {
+  0%,100% {
+    border-color:#ffb347;
+    box-shadow:0 0 0 1px rgba(255,179,71,.22), 0 0 12px rgba(255,107,44,.14), 0 0 22px rgba(255,209,102,.08);
+  }
+  50% {
+    border-color:#ffe08a;
+    box-shadow:0 0 0 2px rgba(255,209,102,.34), 0 0 26px rgba(255,107,44,.28), 0 0 44px rgba(255,209,102,.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cx-live-card.is-current { animation:none; }
+}
