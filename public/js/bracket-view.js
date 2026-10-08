@@ -75,14 +75,58 @@ function matchCardHtml(m, editable, orderMap, currentMatchId) {
 
 function stageColumnsHtml(matchesInStage, editable, roundLabelFn, orderMap, currentMatchId) {
   const cols = groupByRound(matchesInStage);
-  return `<div class="bracket-scroll"><div class="bracket">${cols
+  const connectorMode = cols.length > 1 ? ' bracket-with-connectors' : '';
+  return `<div class="bracket-scroll"><div class="bracket${connectorMode}" data-bracket-connectors="true">${cols
     .map((col, i) => {
       const connect = i < cols.length - 1 ? 'connect' : '';
-      return `<div class="bracket-col ${connect}"><div class="col-label">${roundLabelFn(col[0].round, cols.length)}</div>${col
-        .map((m) => matchCardHtml(m, editable, orderMap, currentMatchId))
-        .join('')}</div>`;
+      return `<div class="bracket-col bracket-round ${connect}" data-round-index="${i}"><div class="col-label">${roundLabelFn(col[0].round, cols.length)}</div><div class="bracket-round-matches">${col
+        .map((m, j) => `<div class="bracket-match-wrap" data-match-index="${j}" data-match-id="${m.id}">${matchCardHtml(m, editable, orderMap, currentMatchId)}</div>`)
+        .join('')}</div></div>`;
     })
-    .join('')}</div></div>`;
+    .join('')}<svg class="bracket-connectors" aria-hidden="true"></svg></div></div>`;
+}
+
+function drawBracketConnectors(root) {
+  if (!root) return;
+  const svg = root.querySelector('.bracket-connectors');
+  const cols = Array.from(root.querySelectorAll('.bracket-round'));
+  if (!svg || cols.length < 2) return;
+
+  const rect = root.getBoundingClientRect();
+  const width = Math.max(root.scrollWidth, rect.width);
+  const height = Math.max(root.scrollHeight, rect.height);
+  svg.setAttribute('width', width);
+  svg.setAttribute('height', height);
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.innerHTML = '';
+
+  const ns = 'http://www.w3.org/2000/svg';
+  for (let r = 0; r < cols.length - 1; r++) {
+    const from = Array.from(cols[r].querySelectorAll('.bracket-match-wrap'));
+    const to = Array.from(cols[r + 1].querySelectorAll('.bracket-match-wrap'));
+    if (!from.length || !to.length) continue;
+
+    from.forEach((wrap, i) => {
+      const target = to[Math.floor(i / 2)];
+      if (!target) return;
+      const a = wrap.getBoundingClientRect();
+      const b = target.getBoundingClientRect();
+      const x1 = a.right - rect.left;
+      const y1 = a.top + a.height / 2 - rect.top;
+      const x2 = b.left - rect.left;
+      const y2 = b.top + b.height / 2 - rect.top;
+      const mid = x1 + Math.max(10, (x2 - x1) / 2);
+
+      const path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', `M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`);
+      path.setAttribute('class', 'bracket-connector-line');
+      svg.appendChild(path);
+    });
+  }
+}
+
+function refreshBracketConnectors(container) {
+  container.querySelectorAll('[data-bracket-connectors="true"]').forEach(drawBracketConnectors);
 }
 
 function wbRoundLabel(round, total) {
@@ -191,6 +235,7 @@ function renderBracket(container, tData, opts) {
 
   container.innerHTML = html;
   if (editable) container.querySelectorAll('.match-card.clickable').forEach((el) => el.addEventListener('click', () => opts.onRecord(el.dataset.matchId)));
+  requestAnimationFrame(() => refreshBracketConnectors(container));
 }
 
 // ---------- 比分輸入 modal ----------
@@ -270,5 +315,13 @@ function openScoreModal(match, onSubmit, onQuickWinner) {
     }
   });
 }
+
+let connectorResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(connectorResizeTimer);
+  connectorResizeTimer = setTimeout(() => {
+    document.querySelectorAll('[data-bracket-connectors="true"]').forEach(drawBracketConnectors);
+  }, 80);
+});
 
 window.CXBracket = { renderBracket, openScoreModal, playerLabel };
