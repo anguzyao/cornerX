@@ -21,16 +21,64 @@
 .overall-row.top-1 .overall-rank::after { content:''; position:absolute; left:50%; bottom:3px; width:26px; height:2px; transform:translateX(-50%); border-radius:2px; background:var(--gold); opacity:.7; }
 .overall-row:not(.top-1):not(.top-2):not(.top-3):not(.top-4) .overall-rank { color:var(--text); }
 @media (max-width:420px) { .overall-row { grid-template-columns:44px 1fr auto; min-height:70px; padding:11px 12px; } .overall-rank { font-size:25px; } .overall-row.top-1 .overall-rank::before, .overall-row.top-2 .overall-rank::before, .overall-row.top-3 .overall-rank::before { top:-11px; font-size:18px; } }
+
+/* V23 — spectator match call */
+.call-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(3,7,13,.86);backdrop-filter:blur(8px);animation:callFadeIn .22s ease}
+.call-overlay.hidden{display:none}
+.call-modal{width:min(620px,100%);text-align:center;border:1px solid rgba(255,174,0,.7);border-radius:22px;padding:34px 24px;background:linear-gradient(180deg,#171f2b,#0b111a);box-shadow:0 0 0 1px rgba(255,174,0,.12),0 0 55px rgba(255,166,0,.2);animation:callPulse 1.2s ease-in-out infinite alternate}
+.call-icon{font-size:44px}.call-title{margin-top:8px;color:#ffc04f;font-size:13px;letter-spacing:.18em;font-weight:900}.call-no{font-size:42px;font-weight:1000;margin:8px 0}.call-player{font-size:28px;font-weight:900;margin:6px 0}.call-vs{font-size:14px;color:#8996a8;margin:5px 0}.call-hint{margin-top:18px;font-size:16px;color:#dce3ec;font-weight:800}.call-close{margin-top:22px}
+.voice-toggle{margin-top:10px}
+@keyframes callFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes callPulse{from{transform:scale(1);box-shadow:0 0 0 1px rgba(255,174,0,.12),0 0 35px rgba(255,166,0,.14)}to{transform:scale(1.012);box-shadow:0 0 0 1px rgba(255,174,0,.2),0 0 65px rgba(255,166,0,.28)}}
+@media(max-width:520px){.call-modal{padding:28px 18px}.call-no{font-size:34px}.call-player{font-size:23px}}
 </style></head>
 <body><div class="shell public-shell"><div class="brand"><div class="brand-logo"><img src="/assets/corner-x-logo.png" alt="Corner X"></div><div class="brand-copy"><div class="brand-name">Corner X</div><div class="sub">線上賽程及排行榜系統</div></div></div><div id="app"><div class="loading">載入中…</div></div></div>
 <script src="/js/app.js"></script><script src="/js/bracket-view.js"></script><script>
 const slug=location.pathname.split('/').filter(Boolean).pop(), app=document.getElementById('app'); let state=null; let currentTab='overall';
+let firstPublicLoad=true;
+const callStorageKey='cx_last_call_'+slug;
+let speechEnabled=localStorage.getItem('cx_call_voice_'+slug)==='1';
+
+function enableCallVoice(){
+  speechEnabled=true; localStorage.setItem('cx_call_voice_'+slug,'1');
+  const btn=document.getElementById('voice-enable'); if(btn) btn.textContent='🔊 叫號聲音已啟用';
+  try{
+    const u=new SpeechSynthesisUtterance('叫號聲音已啟用。');
+    u.lang='zh-TW'; u.rate=.82; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+function speakCall(call){
+  if(!speechEnabled || !('speechSynthesis' in window)) return;
+  const text=`第${call.matchNo}場。${call.playerA}、${call.playerB}。請準備比賽。`;
+  const voices=window.speechSynthesis.getVoices();
+  const u=new SpeechSynthesisUtterance(text);
+  const voice=voices.find(v=>/^zh-TW/i.test(v.lang))||voices.find(v=>/^zh/i.test(v.lang));
+  if(voice)u.voice=voice;
+  u.lang=voice?.lang||'zh-TW'; u.rate=.82; u.pitch=1;
+  window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+}
+function showCall(call){
+  const overlay=document.getElementById('call-overlay'); if(!overlay)return;
+  overlay.classList.remove('hidden');
+  overlay.innerHTML=`<div class="call-modal"><div class="call-icon">📢</div><div class="call-title">MATCH CALL · 比賽叫號</div><div class="call-no">第 ${call.matchNo} 場</div><div class="call-player">${CX.esc(call.playerA)}</div><div class="call-vs">VS</div><div class="call-player">${CX.esc(call.playerB)}</div><div class="call-hint">請選手準備比賽</div><button class="btn btn-secondary call-close" id="call-close">關閉</button></div>`;
+  overlay.querySelector('#call-close').onclick=()=>overlay.classList.add('hidden');
+  speakCall(call);
+}
+function checkCall(){
+  const call=state?.call;
+  if(!call?.id)return;
+  const last=localStorage.getItem(callStorageKey);
+  if(firstPublicLoad){localStorage.setItem(callStorageKey,call.id);return;}
+  if(call.id!==last){localStorage.setItem(callStorageKey,call.id);showCall(call);}
+}
+document.addEventListener('click',e=>{if(e.target.closest('#voice-enable'))enableCallVoice();});
+
 function medal(rank){return ['🥇','🥈','🥉','4️⃣'][rank-1]||rank;}
-function render(){const rounds=state.rounds||[],active=rounds.find(r=>r.status!=='done')||rounds[rounds.length-1], rows=state.overall||[]; app.innerHTML=`<div class="live-head"><div><div class="eyebrow accent">${state.status==='done'?'EVENT COMPLETE':'LIVE NOW'}</div><h2>${CX.esc(state.name)}</h2><div class="muted">${CX.esc(state.eventDate||'')}${state.location?' · '+CX.esc(state.location):''}</div></div><div class="status-dot ${state.status==='done'?'done':''}">${state.status==='done'?'已結束':'LIVE'}</div></div><div class="tabbar"><button class="tab active" data-tab="overall">積分排行榜</button><button class="tab" data-tab="live">即時賽程</button>${rounds.length?'<button class="tab" data-tab="rounds">各場結果</button>':''}</div><div id="tab-content"></div><div class="readonly-banner">◉ 唯讀觀眾模式 · 資料即時更新</div>`;
+function render(){const rounds=state.rounds||[],active=rounds.find(r=>r.status!=='done')||rounds[rounds.length-1], rows=state.overall||[]; app.innerHTML=`<div class="live-head"><div><div class="eyebrow accent">${state.status==='done'?'EVENT COMPLETE':'LIVE NOW'}</div><h2>${CX.esc(state.name)}</h2><div class="muted">${CX.esc(state.eventDate||'')}${state.location?' · '+CX.esc(state.location):''}</div></div><div class="status-dot ${state.status==='done'?'done':''}">${state.status==='done'?'已結束':'LIVE'}</div></div><div class="tabbar"><button class="tab active" data-tab="overall">積分排行榜</button><button class="tab" data-tab="live">即時賽程</button>${rounds.length?'<button class="tab" data-tab="rounds">各場結果</button>':''}</div><div id="tab-content"></div><div class="readonly-banner">◉ 唯讀觀眾模式 · 資料即時更新 <button class="btn btn-secondary btn-sm voice-toggle" id="voice-enable">🔊 啟用叫號聲音</button></div><div id="call-overlay" class="call-overlay hidden"></div>`;
  const c=document.getElementById('tab-content'); function show(t){currentTab=t;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));if(t==='overall')overall(c,rows,rounds);else if(t==='live')live(c,active);else results(c,rounds)} document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>show(x.dataset.tab));show(currentTab);}
 function overall(el,rows,rounds){el.innerHTML=`<div class="panel"><div class="section-title">OVERALL RANKING</div><div class="hint">總積分排行榜</div><div class="overall-list">${rows.map(x=>{const top=x.overallRank<=4?` top-${x.overallRank}`:'';return `<div class="overall-row${top}"><div class="overall-rank">${x.overallRank}</div><div class="overall-player">${CX.esc(x.name)}</div><div class="overall-total">${x.total}</div></div>`}).join('')}</div></div>`}
 
 function live(el,r){if(!r){el.innerHTML='<div class="empty-state">尚未開始比賽</div>';return}el.innerHTML=`<div class="panel"><div class="round-head"><div><div class="eyebrow">ROUND ${r.round_no}</div><h3>${CX.esc(r.name)}</h3></div><span class="badge ${r.status==='done'?'done':'ongoing'}">${r.status==='done'?'已完成':'進行中'}</span></div><div id="bracket"></div></div>`;CXBracket.renderBracket(document.getElementById('bracket'),r.data,{editable:false});}
 function results(el,rounds){el.innerHTML=rounds.slice().reverse().map(r=>`<div class="panel"><div class="round-head"><div><div class="eyebrow">ROUND ${r.round_no}</div><h3>${CX.esc(r.name)}</h3></div><span class="badge ${r.status==='done'?'done':'ongoing'}">${r.status==='done'?'已完成':'進行中'}</span></div>${r.points?.length?`<div class="points-list">${r.points.slice().sort((a,b)=>a.rank-b.rank).map(x=>`<div class="point-row"><span class="rank">${medal(x.rank)}</span><span class="player">${CX.esc(x.name||'')}</span><strong>+${x.points}</strong></div>`).join('')}</div>`:'<div class="hint">本場尚未結算積分</div>'}</div>`).join('')}
-async function load(){try{state=await CX.api('/public/series/'+encodeURIComponent(slug));document.title=state.name+' — Corner X';render()}catch(e){app.innerHTML=`<div class="error-box">${CX.esc(e.message)}</div>`}} load();setInterval(load,5000);
+async function load(){try{state=await CX.api('/public/series/'+encodeURIComponent(slug));document.title=state.name+' — Corner X';render();checkCall();firstPublicLoad=false;const btn=document.getElementById('voice-enable');if(btn&&speechEnabled)btn.textContent='🔊 叫號聲音已啟用'}catch(e){app.innerHTML=`<div class="error-box">${CX.esc(e.message)}</div>`}} load();setInterval(load,5000);
 </script></body></html>
