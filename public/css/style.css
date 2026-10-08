@@ -964,7 +964,7 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
 .cx-tree-desktop,
 .cx-tree-mobile { display:none !important; }
 .bracket-unified { display:block; }
-.bracket-unified .bracket-scroll { overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+.bracket-unified .bracket-scroll { overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch; padding-bottom:18px; }
 .bracket-unified .bracket { min-width:max-content; }
 
 /* Live Control：目前進行中的比賽使用橘黃色閃爍框線。 */
