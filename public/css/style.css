@@ -1029,3 +1029,63 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
     padding-right: max(12px, env(safe-area-inset-right));
   }
 }
+
+/* ---------- V21：統一單排賽程的淘汰樹連線 ---------- */
+.bracket-with-connectors {
+  position: relative;
+  isolation: isolate;
+}
+
+.bracket-with-connectors .bracket-connectors {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.bracket-with-connectors .bracket-round {
+  position: relative;
+  z-index: 1;
+}
+
+.bracket-with-connectors .bracket-round-matches {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 18px;
+  min-height: 100%;
+}
+
+.bracket-with-connectors .bracket-match-wrap {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+}
+
+.bracket-with-connectors .match-card {
+  position: relative;
+  z-index: 3;
+}
+
+.bracket-connector-line {
+  fill: none;
+  stroke: rgba(105, 122, 148, .58);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+/* 已完成路徑稍微亮一點；目前場次仍由卡片自己的橘黃色動畫突出。 */
+.bracket-with-connectors .bracket-round-matches .match-card.completed-match {
+  border-color: rgba(74, 168, 255, .34);
+}
+
+@media (max-width: 560px) {
+  .bracket-with-connectors .bracket-round-matches {
+    gap: 14px;
+  }
+  .bracket-connector-line {
+    stroke-width: 1;
+    stroke: rgba(105, 122, 148, .48);
+  }
+}
