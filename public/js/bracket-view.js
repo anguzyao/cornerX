@@ -95,12 +95,66 @@ function lbRoundLabel(round, total) {
   return `LB 第 ${round} 輪`;
 }
 
+function treeRoundHtml(rounds, side, editable, orderMap, currentMatchId) {
+  const ordered = side === 'right' ? rounds.slice().reverse() : rounds.slice();
+  return `<div class="cx-tree-side cx-tree-${side}" style="--tree-rounds:${ordered.length}">${ordered.map((col, idx) => {
+    const label = wbRoundLabel(col[0].round, rounds.length);
+    return `<div class="cx-tree-round cx-tree-round-${idx + 1}" data-round="${col[0].round}">
+      <div class="cx-tree-round-label">${label}</div>
+      <div class="cx-tree-round-matches">${col.map(m => matchCardHtml(m, editable, orderMap, currentMatchId)).join('')}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function nextPlayableMatch(matches, currentMatch) {
+  if (!currentMatch) return null;
+  const orderMap = getMatchOrder(matches);
+  return matches
+    .filter(m => m.status === 'ready' && isPlayableMatch(m) && m.id !== currentMatch.id)
+    .sort((a,b) => (orderMap.get(a.id)||9999) - (orderMap.get(b.id)||9999))[0] || null;
+}
+
+function livePrepHtml(currentMatch, nextMatch, orderMap) {
+  const card = (m, kind) => {
+    if (!m) return `<div class="cx-live-empty">${kind === 'current' ? '尚未開始比賽' : '下一場尚未產生'}</div>`;
+    const order = orderMap.get(m.id) || '';
+    return `<div class="cx-live-card ${kind === 'current' ? 'is-current' : 'is-next'}">
+      <div class="cx-live-kicker">${kind === 'current' ? 'CURRENT MATCH · 現在進行' : 'NEXT MATCH · 下一場準備'}</div>
+      <div class="cx-live-order">第 ${order} 場</div>
+      <div class="cx-live-player">${CX.esc(playerLabel(m.playerA))}</div>
+      <div class="cx-live-vs">VS</div>
+      <div class="cx-live-player">${CX.esc(playerLabel(m.playerB))}</div>
+    </div>`;
+  };
+  return `<div class="cx-live-prep"><div class="cx-live-title"><span>LIVE CONTROL</span><strong>現在進行 / 下一場準備</strong></div><div class="cx-live-grid">${card(currentMatch,'current')}${card(nextMatch,'next')}</div></div>`;
+}
+
+function renderTreeBracket(wb, editable, orderMap, currentMatchId, currentMatch, nextMatch, tp, gf) {
+  const wbRounds = groupByRound(wb);
+  const maxRound = wbRounds.length ? wbRounds[wbRounds.length - 1][0].round : 0;
+  const treeRoundsAll = wbRounds.filter(col => col[0].round < maxRound);
+  const leftRounds = treeRoundsAll.map(col => col.slice(0, Math.ceil(col.length / 2)));
+  const rightRounds = treeRoundsAll.map(col => col.slice(Math.floor(col.length / 2)));
+  const finalMatches = wbRounds.find(col => col[0].round === maxRound) || [];
+  const central = [...finalMatches, ...tp, ...gf];
+  const centerHtml = central.map(m => `<div class="cx-tree-center-match"><div class="cx-tree-center-label">${m.stage === 'TP' ? '季軍賽' : m.stage === 'GF' ? (m.isReset ? 'Reset Match' : '總決賽') : '冠軍戰'}</div>${matchCardHtml(m, editable, orderMap, currentMatchId)}</div>`).join('');
+  return `<div class="cx-tree-wrap">
+    <div class="cx-tree-caption"><span>TOURNAMENT BRACKET</span><strong>淘汰賽程</strong><small>左右半區 → 中央決賽</small></div>
+    <div class="cx-tree-stage">
+      ${treeRoundHtml(leftRounds, 'left', editable, orderMap, currentMatchId)}
+      <div class="cx-tree-center">${centerHtml || '<div class="cx-tree-empty">決賽席位尚未產生</div>'}</div>
+      ${treeRoundHtml(rightRounds, 'right', editable, orderMap, currentMatchId)}
+    </div>
+  </div>`;
+}
+
 function renderBracket(container, tData, opts) {
   const editable = !!opts.editable;
   const matches = tData.matches;
   const orderMap = getMatchOrder(matches);
   const currentMatch = findCurrentMatch(matches);
   const currentMatchId = currentMatch ? currentMatch.id : null;
+  const nextMatch = nextPlayableMatch(matches, currentMatch);
   const wb = matches.filter((m) => m.stage === 'WB');
   const lb = matches.filter((m) => m.stage === 'LB');
   const gf = matches.filter((m) => m.stage === 'GF').sort((a, b) => a.round - b.round);
@@ -115,58 +169,25 @@ function renderBracket(container, tData, opts) {
       { key: 'thirdPlace', rank: 3, label: '季軍', en: '3RD PLACE', medal: '🥉', name: tData.thirdPlace, cls: 'podium-3' },
       { key: 'fourthPlace', rank: 4, label: '殿軍', en: '4TH PLACE', medal: '④', name: tData.fourthPlace, cls: 'podium-4' },
     ].filter((p) => p.name);
-
-    html += `<div class="podium-banner">
-      <div class="podium-title"><span>🏆</span><strong>最終名次</strong><small>FINAL RANKING</small></div>
-      <div class="podium-grid">${podium.map((p) => `
-        <div class="podium-card ${p.cls}">
-          <div class="podium-rank">${p.medal}</div>
-          <div class="podium-label">${p.label} <span>${p.en}</span></div>
-          <div class="podium-name">${CX.esc(p.name)}</div>
-          <div class="podium-number">NO.${p.rank}</div>
-        </div>`).join('')}</div>
-    </div>`;
+    html += `<div class="podium-banner"><div class="podium-title"><span>🏆</span><strong>最終名次</strong><small>FINAL RANKING</small></div><div class="podium-grid">${podium.map((p) => `<div class="podium-card ${p.cls}"><div class="podium-rank">${p.medal}</div><div class="podium-label">${p.label} <span>${p.en}</span></div><div class="podium-name">${CX.esc(p.name)}</div><div class="podium-number">NO.${p.rank}</div></div>`).join('')}</div></div>`;
   }
 
+  html += livePrepHtml(currentMatch, nextMatch, orderMap);
+  html += `<div class="cx-tree-desktop">${renderTreeBracket(wb, editable, orderMap, currentMatchId, currentMatch, nextMatch, tp, gf)}</div>`;
+  html += `<div class="cx-tree-mobile">`;
   if (currentMatch) {
     const currentOrder = orderMap.get(currentMatch.id);
     html += `<div class="current-match-banner"><span class="current-match-dot"></span><div><strong>現在進行：第 ${currentOrder} 場</strong><span>${CX.esc(playerLabel(currentMatch.playerA))} <b>VS</b> ${CX.esc(playerLabel(currentMatch.playerB))}</span></div></div>`;
   }
   html += `<div class="stage-heading wb">${lb.length ? 'WINNERS BRACKET 勝部' : '賽程 BRACKET'}</div>`;
   html += stageColumnsHtml(wb, editable, wbRoundLabel, orderMap, currentMatchId);
-
-  if (lb.length) {
-    html += `<div class="stage-heading lb">LOSERS BRACKET 敗部</div>`;
-    html += stageColumnsHtml(lb, editable, lbRoundLabel, orderMap, currentMatchId);
-  }
-
-  if (tp.length) {
-    html += `<div class="stage-heading tp">THIRD PLACE MATCH 季軍賽</div>`;
-    html += `<div class="bracket-scroll"><div class="bracket"><div class="bracket-col"><div class="col-label">季軍賽</div>${tp.map((m) => matchCardHtml(m, editable, orderMap, currentMatchId)).join('')}</div></div></div>`;
-  }
-
-  if (gf.length) {
-    html += `<div class="stage-heading gf">GRAND FINAL 總決賽</div>`;
-    html += `<div class="bracket-scroll"><div class="bracket">${gf
-      .map(
-        (m, i) =>
-          `<div class="bracket-col"><div class="col-label">${m.isReset ? 'Reset Match' : '總決賽'}</div>${matchCardHtml(
-            m,
-            editable,
-            orderMap,
-            currentMatchId
-          )}</div>`
-      )
-      .join('')}</div></div>`;
-  }
+  if (lb.length) { html += `<div class="stage-heading lb">LOSERS BRACKET 敗部</div>${stageColumnsHtml(lb, editable, lbRoundLabel, orderMap, currentMatchId)}`; }
+  if (tp.length) { html += `<div class="stage-heading tp">THIRD PLACE MATCH 季軍賽</div><div class="bracket-scroll"><div class="bracket"><div class="bracket-col"><div class="col-label">季軍賽</div>${tp.map((m) => matchCardHtml(m, editable, orderMap, currentMatchId)).join('')}</div></div></div>`; }
+  if (gf.length) { html += `<div class="stage-heading gf">GRAND FINAL 總決賽</div><div class="bracket-scroll"><div class="bracket">${gf.map((m) => `<div class="bracket-col"><div class="col-label">${m.isReset ? 'Reset Match' : '總決賽'}</div>${matchCardHtml(m, editable, orderMap, currentMatchId)}</div>`).join('')}</div></div>`; }
+  html += `</div>`;
 
   container.innerHTML = html;
-
-  if (editable) {
-    container.querySelectorAll('.match-card.clickable').forEach((el) => {
-      el.addEventListener('click', () => opts.onRecord(el.dataset.matchId));
-    });
-  }
+  if (editable) container.querySelectorAll('.match-card.clickable').forEach((el) => el.addEventListener('click', () => opts.onRecord(el.dataset.matchId)));
 }
 
 // ---------- 比分輸入 modal ----------
