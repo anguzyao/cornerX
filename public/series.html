@@ -117,13 +117,13 @@ function getCallCandidates(r){
 }
 function renderCallPanel(r){
   const box=document.createElement('div'); box.className='call-panel';
-  const ready=getCallCandidates(r).slice(0,3);
+  const ready=getCallCandidates(r).slice(0,4);
   const calls=Array.isArray(r?.data?.calls)?r.data.calls:(r?.data?.call?[r.data.call]:[]);
   if(!ready.length){
     box.innerHTML='<div class="call-kicker">📢 MATCH CALL · 選手叫號</div><div class="call-status">目前沒有可叫號的比賽。</div>';
     return box;
   }
-  box.innerHTML=`<div class="call-kicker">📢 MATCH CALL · 接下來 3 場</div><div class="call-list"></div>`;
+  box.innerHTML=`<div class="call-kicker">📢 MATCH CALL · 目前＋接下來 3 場</div><div class="call-list"></div>`;
   const list=box.querySelector('.call-list');
   ready.forEach((target,idx)=>{
     const order=callMatchOrder(r.data.matches).findIndex(m=>m.id===target.id)+1;
