@@ -288,8 +288,10 @@ async function publicSeriesPayload(c, row) {
   for (const r of rounds) {
     const { results } = await c.env.DB.prepare('SELECT rp.participant_id, rp.rank, rp.points, rp.source, rp.locked, p.name FROM series_round_points rp JOIN series_participants p ON p.id = rp.participant_id WHERE rp.round_id = ? ORDER BY rp.rank').bind(r.id).all();
     const roundData = r.data;
-    const call = roundData && roundData.call ? roundData.call : null;
-    if (call && (!latestCall || String(call.createdAt) > String(latestCall.createdAt))) latestCall = { ...call, roundId: r.id };
+    const calls = Array.isArray(roundData?.calls) ? roundData.calls : (roundData?.call ? [roundData.call] : []);
+    for (const call of calls) {
+      if (call && (!latestCall || String(call.createdAt) > String(latestCall.createdAt))) latestCall = { ...call, roundId: r.id };
+    }
     withPoints.push({ ...r, points: results });
   }
   return {
@@ -515,7 +517,7 @@ app.post('/api/series/:id/rounds/:roundId/call', async (c) => {
   }
 
   const createdAt = new Date().toISOString();
-  data.call = {
+  const newCall = {
     id: newId('call'),
     matchId,
     matchNo,
@@ -523,9 +525,13 @@ app.post('/api/series/:id/rounds/:roundId/call', async (c) => {
     playerB,
     createdAt,
   };
+  const calls = Array.isArray(data.calls) ? data.calls.slice() : (data.call ? [data.call] : []);
+  calls.push(newCall);
+  data.calls = calls.slice(-100);
+  delete data.call;
   await c.env.DB.prepare('UPDATE series_rounds SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), createdAt, round.id).run();
   await c.env.DB.prepare('UPDATE series SET updated_at = ? WHERE id = ?').bind(createdAt, series.id).run();
-  return c.json({ ok: true, call: { ...data.call, roundId: round.id } });
+  return c.json({ ok: true, call: { ...newCall, roundId: round.id } });
 });
 
 app.post('/api/series/:id/rounds/:roundId/undo', async (c) => {
