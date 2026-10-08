@@ -646,10 +646,10 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
   display:flex;
   align-items:center;
   justify-content:center;
-  background:transparent;
-  border-radius:0;
-  padding:0;
-  box-shadow:none;
+  background:#fff;
+  border-radius:7px;
+  padding:6px 10px;
+  box-shadow:0 0 18px rgba(74,168,255,.08);
 }
 .brand-logo img { display:block; width:100%; height:100%; object-fit:contain; }
 .brand .sub { color:var(--text-muted); font-size:12px; margin-top:0; }
@@ -888,4 +888,72 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
   .podium-4 { grid-column:1 / -1; grid-row:3; min-height:68px; }
   .podium-name { font-size:15px; }
   .podium-1 .podium-name { font-size:18px; }
+}
+
+/* ---------- V18 Tournament Tree + Current / Next control ---------- */
+.cx-tree-desktop { display:none; }
+.cx-tree-mobile { display:block; }
+.cx-live-prep { margin:8px 0 14px; padding:12px; border:1px solid rgba(74,168,255,.24); border-radius:12px; background:linear-gradient(135deg,rgba(74,168,255,.055),rgba(255,107,44,.035)); }
+.cx-live-title { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.cx-live-title span { color:var(--cyan); font:700 10px 'Rajdhani',sans-serif; letter-spacing:1.5px; }
+.cx-live-title strong { font-size:13px; }
+.cx-live-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.cx-live-card { min-width:0; padding:12px; border:1px solid var(--line); border-radius:10px; background:rgba(15,19,27,.9); }
+.cx-live-card.is-current { border-color:rgba(74,168,255,.65); box-shadow:0 0 18px rgba(74,168,255,.11); }
+.cx-live-card.is-next { border-color:rgba(127,139,155,.4); }
+.cx-live-kicker { color:var(--text-muted); font:700 9px 'Rajdhani',sans-serif; letter-spacing:1px; margin-bottom:4px; }
+.cx-live-card.is-current .cx-live-kicker { color:var(--orange); }
+.cx-live-order { color:var(--cyan); font:900 17px 'Rajdhani',sans-serif; margin-bottom:8px; }
+.cx-live-player { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:16px; font-weight:900; }
+.cx-live-vs { color:var(--text-muted); font:800 10px 'Rajdhani',sans-serif; margin:3px 0; }
+.cx-live-empty { color:var(--text-muted); padding:18px 8px; text-align:center; font-size:12px; }
+
+@media (min-width: 760px) {
+  .shell { max-width: 1440px; }
+  .cx-tree-desktop { display:block; }
+  .cx-tree-mobile { display:none; }
+  .cx-live-prep { max-width:760px; margin-left:auto; margin-right:auto; }
+  .cx-tree-wrap { position:relative; padding:8px 6px 18px; overflow:hidden; }
+  .cx-tree-caption { display:flex; align-items:baseline; gap:9px; margin:2px 8px 12px; }
+  .cx-tree-caption span { color:var(--cyan); font:700 10px 'Rajdhani',sans-serif; letter-spacing:1.6px; }
+  .cx-tree-caption strong { font-size:15px; }
+  .cx-tree-caption small { color:var(--text-muted); font-size:10px; }
+  .cx-tree-stage { display:grid; grid-template-columns:minmax(0,1fr) 230px minmax(0,1fr); gap:18px; align-items:stretch; min-width:0; }
+  .cx-tree-side { display:grid; grid-template-columns:repeat(var(--tree-rounds, 1), minmax(90px,1fr)); gap:8px; min-width:0; align-items:stretch; }
+  .cx-tree-left { direction:ltr; }
+  .cx-tree-right { direction:rtl; }
+  .cx-tree-round { position:relative; min-width:0; display:flex; flex-direction:column; }
+  .cx-tree-round-label { height:22px; color:var(--text-muted); text-align:center; font:700 9px 'Rajdhani','Noto Sans TC',sans-serif; letter-spacing:.8px; white-space:nowrap; }
+  .cx-tree-round-matches { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:space-around; gap:8px; padding:8px 0; }
+  .cx-tree-right .cx-tree-round-label, .cx-tree-right .match-card { direction:ltr; }
+  .cx-tree-side .match-card { width:100%; box-sizing:border-box; margin:0; }
+  .cx-tree-side .match-order { font-size:8px; min-height:19px; padding:3px 6px; }
+  .cx-tree-side .match-row { min-height:25px; padding:5px 7px; }
+  .cx-tree-side .pname { font-size:11px; }
+  .cx-tree-side .pscore { font-size:11px; }
+  .cx-tree-side .cx-tree-round:not(:last-child) .match-card::after { content:''; position:absolute; top:50%; width:18px; height:1px; background:var(--line-bright); }
+  .cx-tree-left .cx-tree-round:not(:last-child) .match-card::after { right:-19px; }
+  .cx-tree-right .cx-tree-round:not(:last-child) .match-card::after { left:-19px; }
+  .cx-tree-center { position:relative; min-height:100%; display:flex; flex-direction:column; justify-content:center; gap:18px; padding:0 6px; }
+  .cx-tree-center::before, .cx-tree-center::after { content:''; position:absolute; top:50%; width:34px; height:1px; background:linear-gradient(90deg,var(--line-bright),rgba(74,168,255,.45)); }
+  .cx-tree-center::before { left:-12px; }
+  .cx-tree-center::after { right:-12px; transform:scaleX(-1); }
+  .cx-tree-center-match { position:relative; z-index:2; }
+  .cx-tree-center-label { color:var(--text-muted); text-align:center; font:700 9px 'Rajdhani',sans-serif; letter-spacing:1px; margin-bottom:5px; }
+  .cx-tree-center .match-card { border-color:rgba(74,168,255,.38); }
+  .cx-tree-center .match-card.current-match { border-color:var(--orange); }
+  .cx-tree-empty { color:var(--text-muted); text-align:center; font-size:11px; padding:30px 10px; border:1px dashed var(--line); border-radius:10px; }
+}
+
+@media (min-width: 1000px) {
+  .cx-tree-stage { grid-template-columns:minmax(0,1fr) 250px minmax(0,1fr); gap:28px; }
+  .cx-tree-wrap { padding-left:12px; padding-right:12px; }
+  .cx-tree-side { gap:12px; }
+  .cx-tree-side .match-row { min-height:28px; }
+  .cx-tree-side .pname { font-size:12px; }
+}
+
+@media (max-width: 560px) {
+  .cx-live-grid { grid-template-columns:1fr; }
+  .cx-live-card.is-next { opacity:.9; }
 }
