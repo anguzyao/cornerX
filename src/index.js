@@ -287,7 +287,7 @@ async function publicSeriesPayload(c, row) {
   let latestCall = null;
   for (const r of rounds) {
     const { results } = await c.env.DB.prepare('SELECT rp.participant_id, rp.rank, rp.points, rp.source, rp.locked, p.name FROM series_round_points rp JOIN series_participants p ON p.id = rp.participant_id WHERE rp.round_id = ? ORDER BY rp.rank').bind(r.id).all();
-    const roundData = JSON.parse(r.data);
+    const roundData = r.data;
     const call = roundData && roundData.call ? roundData.call : null;
     if (call && (!latestCall || String(call.createdAt) > String(latestCall.createdAt))) latestCall = { ...call, roundId: r.id };
     withPoints.push({ ...r, points: results });
