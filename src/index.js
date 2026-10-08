@@ -284,8 +284,12 @@ async function publicSeriesPayload(c, row) {
   const rounds = await seriesRounds(c, row.id);
   const overall = await overallLeaderboard(c, row.id);
   const withPoints = [];
+  let latestCall = null;
   for (const r of rounds) {
     const { results } = await c.env.DB.prepare('SELECT rp.participant_id, rp.rank, rp.points, rp.source, rp.locked, p.name FROM series_round_points rp JOIN series_participants p ON p.id = rp.participant_id WHERE rp.round_id = ? ORDER BY rp.rank').bind(r.id).all();
+    const roundData = JSON.parse(r.data);
+    const call = roundData && roundData.call ? roundData.call : null;
+    if (call && (!latestCall || String(call.createdAt) > String(latestCall.createdAt))) latestCall = { ...call, roundId: r.id };
     withPoints.push({ ...r, points: results });
   }
   return {
@@ -298,6 +302,7 @@ async function publicSeriesPayload(c, row) {
     participants,
     rounds: withPoints,
     overall,
+    call: latestCall,
     readOnly: true,
   };
 }
@@ -491,6 +496,36 @@ app.post('/api/series/:id/rounds/:roundId/matches/:matchId/result', async (c) =>
   } catch (e) { return jsonError(c, 400, e.message); }
   const status = await saveRoundAndMaybePoints(c, series, round, data, previousSnapshot);
   return c.json({ id: round.id, status, data });
+});
+
+app.post('/api/series/:id/rounds/:roundId/call', async (c) => {
+  const { series, round } = await loadOwnedRound(c);
+  if (!series || !round) return jsonError(c, 404, '找不到這場比賽');
+  const body = await c.req.json().catch(() => ({}));
+  const matchId = String(body.matchId || '').trim();
+  const playerA = String(body.playerA || '').trim();
+  const playerB = String(body.playerB || '').trim();
+  const matchNo = Number(body.matchNo || 0);
+  if (!matchId || !playerA || !playerB || !matchNo) return jsonError(c, 400, '叫號資料不完整');
+
+  const data = JSON.parse(round.data);
+  const match = (data.matches || []).find((m) => m.id === matchId);
+  if (!match || match.status !== 'ready' || !match.playerA || !match.playerB || match.playerA === '__BYE__' || match.playerB === '__BYE__') {
+    return jsonError(c, 400, '這場比賽目前無法叫號');
+  }
+
+  const createdAt = new Date().toISOString();
+  data.call = {
+    id: newId('call'),
+    matchId,
+    matchNo,
+    playerA,
+    playerB,
+    createdAt,
+  };
+  await c.env.DB.prepare('UPDATE series_rounds SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), createdAt, round.id).run();
+  await c.env.DB.prepare('UPDATE series SET updated_at = ? WHERE id = ?').bind(createdAt, series.id).run();
+  return c.json({ ok: true, call: { ...data.call, roundId: round.id } });
 });
 
 app.post('/api/series/:id/rounds/:roundId/undo', async (c) => {
