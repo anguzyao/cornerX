@@ -990,3 +990,42 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
 @media (prefers-reduced-motion: reduce) {
   .cx-live-card.is-current { animation:none; }
 }
+
+/* ---------- V20：iPhone App / Safe Area 與頂部按鈕觸控區 ---------- */
+/* 加入主畫面（standalone）時，避開 Dynamic Island / 狀態列安全區。 */
+.shell {
+  padding-top: max(22px, env(safe-area-inset-top));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+
+/* 頂部導覽提高層級，避免被其他區塊覆蓋。 */
+.topbar {
+  position: relative;
+  z-index: 20;
+}
+
+/* iPhone 實際可點擊區至少 44×44pt。 */
+.topbar .back-btn,
+.topbar .icon-btn {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  position: relative;
+  z-index: 21;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (max-width: 560px) {
+  .shell {
+    padding-top: max(18px, env(safe-area-inset-top));
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+}
