@@ -172,18 +172,21 @@ function renderBracket(container, tData, opts) {
     html += `<div class="podium-banner"><div class="podium-title"><span>🏆</span><strong>最終名次</strong><small>FINAL RANKING</small></div><div class="podium-grid">${podium.map((p) => `<div class="podium-card ${p.cls}"><div class="podium-rank">${p.medal}</div><div class="podium-label">${p.label} <span>${p.en}</span></div><div class="podium-name">${CX.esc(p.name)}</div><div class="podium-number">NO.${p.rank}</div></div>`).join('')}</div></div>`;
   }
 
+  // V19：所有裝置統一使用原本「一整排賽程欄位」的呈現方式。
+  // 不再左右對稱分半；各輪由左至右排列，每一輪的比賽垂直往下延伸，整體可橫向滑動。
   html += livePrepHtml(currentMatch, nextMatch, orderMap);
-  html += `<div class="cx-tree-desktop">${renderTreeBracket(wb, editable, orderMap, currentMatchId, currentMatch, nextMatch, tp, gf)}</div>`;
-  html += `<div class="cx-tree-mobile">`;
-  if (currentMatch) {
-    const currentOrder = orderMap.get(currentMatch.id);
-    html += `<div class="current-match-banner"><span class="current-match-dot"></span><div><strong>現在進行：第 ${currentOrder} 場</strong><span>${CX.esc(playerLabel(currentMatch.playerA))} <b>VS</b> ${CX.esc(playerLabel(currentMatch.playerB))}</span></div></div>`;
-  }
+  html += `<div class="bracket-unified">`;
   html += `<div class="stage-heading wb">${lb.length ? 'WINNERS BRACKET 勝部' : '賽程 BRACKET'}</div>`;
   html += stageColumnsHtml(wb, editable, wbRoundLabel, orderMap, currentMatchId);
-  if (lb.length) { html += `<div class="stage-heading lb">LOSERS BRACKET 敗部</div>${stageColumnsHtml(lb, editable, lbRoundLabel, orderMap, currentMatchId)}`; }
-  if (tp.length) { html += `<div class="stage-heading tp">THIRD PLACE MATCH 季軍賽</div><div class="bracket-scroll"><div class="bracket"><div class="bracket-col"><div class="col-label">季軍賽</div>${tp.map((m) => matchCardHtml(m, editable, orderMap, currentMatchId)).join('')}</div></div></div>`; }
-  if (gf.length) { html += `<div class="stage-heading gf">GRAND FINAL 總決賽</div><div class="bracket-scroll"><div class="bracket">${gf.map((m) => `<div class="bracket-col"><div class="col-label">${m.isReset ? 'Reset Match' : '總決賽'}</div>${matchCardHtml(m, editable, orderMap, currentMatchId)}</div>`).join('')}</div></div>`; }
+  if (lb.length) {
+    html += `<div class="stage-heading lb">LOSERS BRACKET 敗部</div>${stageColumnsHtml(lb, editable, lbRoundLabel, orderMap, currentMatchId)}`;
+  }
+  if (tp.length) {
+    html += `<div class="stage-heading tp">THIRD PLACE MATCH 季軍賽</div><div class="bracket-scroll"><div class="bracket"><div class="bracket-col"><div class="col-label">季軍賽</div>${tp.map((m) => matchCardHtml(m, editable, orderMap, currentMatchId)).join('')}</div></div></div>`;
+  }
+  if (gf.length) {
+    html += `<div class="stage-heading gf">GRAND FINAL 總決賽</div><div class="bracket-scroll"><div class="bracket">${gf.map((m) => `<div class="bracket-col"><div class="col-label">${m.isReset ? 'Reset Match' : '總決賽'}</div>${matchCardHtml(m, editable, orderMap, currentMatchId)}</div>`).join('')}</div></div>`;
+  }
   html += `</div>`;
 
   container.innerHTML = html;
