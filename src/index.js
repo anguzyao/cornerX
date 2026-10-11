@@ -392,13 +392,25 @@ app.post('/api/series/:id/rounds', async (c) => {
   const roundName = String(body.name || '').trim() || `第 ${Number(body.roundNo) || 1} 場`;
   const existing = await c.env.DB.prepare('SELECT COALESCE(MAX(round_no),0) AS max_no FROM series_rounds WHERE series_id = ?').bind(row.id).first();
   const roundNo = Number(existing.max_no || 0) + 1;
+
+  // 每一場有獨立名單；未選入本場的既有選手仍保留在活動總排行榜。
+  const requestedPlayers = Array.isArray(body.players)
+    ? body.players.map((p) => String(p || '').trim()).filter(Boolean)
+    : participants.map((p) => p.name);
+  if (requestedPlayers.length < 2) return jsonError(c, 400, '本場至少需要 2 位參賽者');
+  if (new Set(requestedPlayers).size !== requestedPlayers.length) return jsonError(c, 400, '本場參賽者名稱不可重複');
+  const existingByName = new Map(participants.map((p) => [p.name, p]));
+  const newNames = requestedPlayers.filter((name) => !existingByName.has(name));
   let data;
-  try { data = createBracket(participants.map((p) => p.name), format); } catch (e) { return jsonError(c, 400, e.message); }
+  try { data = createBracket(requestedPlayers, format); } catch (e) { return jsonError(c, 400, e.message); }
   const id = newId('r');
   const now = new Date().toISOString();
-  await c.env.DB.prepare('INSERT INTO series_rounds (id, series_id, round_no, name, format, status, data, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)').bind(id, row.id, roundNo, roundName, format, data.champion ? 'done' : 'ongoing', JSON.stringify(data), now, now).run();
-  await c.env.DB.prepare('UPDATE series SET status = ?, updated_at = ? WHERE id = ?').bind('ongoing', now, row.id).run();
-  return c.json({ id, roundNo, name: roundName, format, status: data.champion ? 'done' : 'ongoing', data });
+  const maxSort = participants.reduce((max, p) => Math.max(max, Number(p.sort_order) || 0), -1);
+  const statements = newNames.map((name, i) => c.env.DB.prepare('INSERT INTO series_participants (id, series_id, name, sort_order) VALUES (?,?,?,?)').bind(newId('p'), row.id, name, maxSort + i + 1));
+  statements.push(c.env.DB.prepare('INSERT INTO series_rounds (id, series_id, round_no, name, format, status, data, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)').bind(id, row.id, roundNo, roundName, format, data.champion ? 'done' : 'ongoing', JSON.stringify(data), now, now));
+  statements.push(c.env.DB.prepare('UPDATE series SET status = ?, updated_at = ? WHERE id = ?').bind('ongoing', now, row.id));
+  await c.env.DB.batch(statements);
+  return c.json({ id, roundNo, name: roundName, format, status: data.champion ? 'done' : 'ongoing', data, players: requestedPlayers, addedParticipants: newNames });
 });
 
 async function loadOwnedRound(c) {
@@ -439,8 +451,8 @@ app.post('/api/series/:id/rounds/:roundId/reseed', async (c) => {
   if (hasPlayedMatch) return jsonError(c, 400, '已有比賽結果，賽程對位已鎖定');
 
   const body = await c.req.json().catch(() => ({}));
-  const participants = await seriesParticipants(c, series.id);
-  const participantNames = participants.map((p) => p.name);
+  // 重排只能使用這一場建立時的參賽名單，不可把活動內其他賽事的選手帶進來。
+  const participantNames = Array.isArray(current.players) ? current.players.filter(Boolean) : [];
   let players;
   const mode = body.mode === 'manual' ? 'manual' : 'random';
   if (mode === 'manual') {
