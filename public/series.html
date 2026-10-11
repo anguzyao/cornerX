@@ -34,6 +34,15 @@
 .call-btn{width:118px;min-height:44px;font-size:15px;font-weight:900;flex:0 0 auto}
 .call-btn.called{background:rgba(255,166,0,.12);border:1px solid rgba(255,166,0,.5);color:#ffc45c}
 @media(max-width:560px){.call-item{align-items:stretch;flex-direction:column}.call-btn{width:100%}.call-players{white-space:normal}}
+
+/* V30 — independent format and roster for each new round */
+.round-create-mask{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
+.round-create-sheet{width:min(620px,100%);max-height:92dvh;overflow:auto;background:var(--panel,#111923);border:1px solid rgba(100,170,230,.32);border-radius:18px;padding:20px;box-shadow:0 20px 70px rgba(0,0,0,.5)}
+.round-create-sheet h3{margin:0 0 6px}.round-create-field{display:grid;gap:8px;margin-top:16px}.round-create-field label{font-weight:800;color:var(--text,#eaf0f7)}
+.round-create-field input[type=text],.round-create-field select,.round-create-field textarea{width:100%;min-height:44px;border:1px solid var(--line,rgba(255,255,255,.15));border-radius:10px;background:rgba(0,0,0,.18);color:var(--text,#eaf0f7);padding:10px 12px;font:inherit}
+.round-format-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}.round-format-option{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line,rgba(255,255,255,.15));border-radius:12px;cursor:pointer}.round-format-option:has(input:checked){border-color:var(--cyan,#43b7ff);background:rgba(67,183,255,.09)}
+.round-roster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:220px;overflow:auto;padding:2px}.round-roster label{display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:9px;min-width:0;font-weight:500}.round-roster label span{overflow-wrap:anywhere}.round-create-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}.round-roster-tools{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:480px){.round-create-sheet{padding:16px}.round-roster{grid-template-columns:1fr}.round-create-actions{flex-direction:column-reverse}.round-create-actions button{width:100%}}
 </style></head>
 <body><div class="shell"><div class="topbar"><a class="back-btn" href="/">←</a><div><div class="eyebrow">PRIVATE CONTROL</div><div class="page-title" id="title">活動</div></div><button class="icon-btn" id="share">↗</button></div><div id="app"><div class="loading">載入中…</div></div></div>
 <script src="/js/app.js"></script><script src="/js/bracket-view.js"></script>
@@ -79,12 +88,44 @@ function render(){
     if(!confirm('確定結束活動？結束後仍可觀看，但不再新增場次。'))return;
     try{await api(`/series/${id}/finish`,{method:'POST'});await load();}catch(e){CX.toast(e.message)}
   };
-  document.getElementById('new-round').onclick=async()=>{
-    const name=prompt('本場名稱',`第 ${rounds.length+1} 場`);if(name===null)return;
-    try{const res=await api(`/series/${id}/rounds`,{method:'POST',body:{name,format:'single'}});selectedRoundId=res.id;currentTab='round';await load();}catch(e){CX.toast(e.message)}
-  };
+  document.getElementById('new-round').onclick=()=>openCreateRoundModal(rounds.length+1);
   document.getElementById('copy').onclick=async()=>{const u=location.origin+'/series-public/'+state.shareSlug;CX.toast(await CX.copy(u)?'已複製觀眾網址':'複製失敗');};
 }
+function openCreateRoundModal(nextNo){
+  const roster=Array.isArray(state?.participants)?state.participants:[];
+  const mask=document.createElement('div');mask.className='round-create-mask';
+  mask.innerHTML=`<section class="round-create-sheet" role="dialog" aria-modal="true" aria-label="新增賽事">
+    <h3>新增賽事</h3><div class="hint">本場可獨立選擇賽制與參賽名單。未參加本場的選手會保留既有積分。</div>
+    <div class="round-create-field"><label for="round-name">賽事名稱</label><input id="round-name" type="text" maxlength="80" value="第 ${nextNo} 場" placeholder="例如：公開組、進階組"></div>
+    <div class="round-create-field"><label>淘汰賽制</label><div class="round-format-options"><label class="round-format-option"><input type="radio" name="round-format" value="single" checked><span><strong>單淘汰</strong><br><small>輸一場即淘汰</small></span></label><label class="round-format-option"><input type="radio" name="round-format" value="double"><span><strong>雙敗淘汰</strong><br><small>輸兩場才淘汰</small></span></label></div></div>
+    <div class="round-create-field"><label>本場參賽選手</label><div class="round-roster-tools"><button type="button" class="btn btn-secondary btn-sm" id="roster-all">全選</button><button type="button" class="btn btn-secondary btn-sm" id="roster-none">全不選</button></div><div class="round-roster" id="round-roster">${roster.map(p=>`<label><input type="checkbox" value="${CX.esc(p.name)}" checked><span>${CX.esc(p.name)}</span></label>`).join('')}</div><div class="hint">取消勾選代表本場缺席，不會刪除選手或歷史積分。</div></div>
+    <div class="round-create-field"><label for="round-new-players">新增選手（每行一位）</label><textarea id="round-new-players" rows="3" placeholder="輸入本場新加入的選手名稱，一行一位"></textarea><div class="hint">新選手會加入活動總排行榜，從本場開始累積積分，不會補算先前賽事。</div></div>
+    <div class="round-create-actions"><button class="btn btn-secondary" id="round-cancel">取消</button><button class="btn btn-primary" id="round-create-submit">建立賽事</button></div>
+  </section>`;
+  document.body.appendChild(mask);
+  const close=()=>mask.remove();
+  mask.querySelector('#round-cancel').onclick=close;
+  mask.addEventListener('click',e=>{if(e.target===mask)close()});
+  mask.querySelector('#roster-all').onclick=()=>mask.querySelectorAll('#round-roster input[type=checkbox]').forEach(x=>x.checked=true);
+  mask.querySelector('#roster-none').onclick=()=>mask.querySelectorAll('#round-roster input[type=checkbox]').forEach(x=>x.checked=false);
+  mask.querySelector('#round-create-submit').onclick=async()=>{
+    const btn=mask.querySelector('#round-create-submit');btn.disabled=true;
+    const name=mask.querySelector('#round-name').value.trim();
+    const format=mask.querySelector('input[name="round-format"]:checked')?.value||'single';
+    const players=[...mask.querySelectorAll('#round-roster input[type=checkbox]:checked')].map(x=>x.value);
+    const newPlayers=mask.querySelector('#round-new-players').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    const allPlayers=[...players,...newPlayers];
+    if(!name){CX.toast('請輸入賽事名稱');btn.disabled=false;return}
+    if(allPlayers.length<2){CX.toast('本場至少需要 2 位參賽者');btn.disabled=false;return}
+    if(new Set(allPlayers).size!==allPlayers.length){CX.toast('參賽名單有重複名稱，請檢查勾選名單與新增名單');btn.disabled=false;return}
+    try{
+      const res=await api(`/series/${id}/rounds`,{method:'POST',body:{name,format,players:allPlayers}});
+      selectedRoundId=res.id;currentTab='round';close();await load();CX.toast(`已建立${format==='double'?'雙敗':'單淘汰'}賽事`);
+    }catch(e){btn.disabled=false;CX.toast(e.message)}
+  };
+  mask.querySelector('#round-name').focus();
+}
+
 function renderOverall(el,rows){
   el.innerHTML=`<div class="panel"><div class="section-title">累積積分</div><div class="hint">總積分排行榜</div><div class="overall-list">${rows.map(x=>{
     const top=x.overallRank<=4?` top-${x.overallRank}`:'';
