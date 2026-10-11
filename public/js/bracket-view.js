@@ -207,12 +207,34 @@ function renderBracket(container, tData, opts) {
   let html = '';
 
   if (tData.champion) {
+    // 雙敗淘汰：如果後端尚未寫入第三、四名，直接依賽程晉級連線推算。
+    // 第三名 = 送敗部冠軍進總決賽的最後一場敗部賽之敗者。
+    // 第四名 = 勝者晉級上述敗部決賽的前一場敗部賽之敗者。
+    let thirdPlace = tData.thirdPlace || null;
+    let fourthPlace = tData.fourthPlace || null;
+    if (tData.grandFinal && (!thirdPlace || !fourthPlace)) {
+      const matches = tData.matches || [];
+      const firstGrandFinal = matches.find((m) => m.stage === 'GF' && !m.isReset) ||
+        matches.find((m) => m.id === tData.grandFinal);
+      if (firstGrandFinal) {
+        const lbFinal = matches.find((m) => m.stage === 'LB' && m.status === 'done' &&
+          m.feedsWinnerTo && m.feedsWinnerTo.matchId === firstGrandFinal.id);
+        if (lbFinal) {
+          if (!thirdPlace) thirdPlace = lbFinal.loser || (lbFinal.winner === lbFinal.playerA ? lbFinal.playerB : lbFinal.playerA);
+          if (!fourthPlace) {
+            const lbPreFinal = matches.find((m) => m.stage === 'LB' && m.status === 'done' &&
+              m.id !== lbFinal.id && m.feedsWinnerTo && m.feedsWinnerTo.matchId === lbFinal.id);
+            if (lbPreFinal) fourthPlace = lbPreFinal.loser || (lbPreFinal.winner === lbPreFinal.playerA ? lbPreFinal.playerB : lbPreFinal.playerA);
+          }
+        }
+      }
+    }
     const podium = [
       { key: 'runnerUp', rank: 2, label: '亞軍', en: 'RUNNER-UP', medal: '🥈', name: tData.runnerUp, cls: 'podium-2' },
       { key: 'champion', rank: 1, label: '冠軍', en: 'CHAMPION', medal: '🏆', name: tData.champion, cls: 'podium-1' },
-      { key: 'thirdPlace', rank: 3, label: '季軍', en: '3RD PLACE', medal: '🥉', name: tData.thirdPlace, cls: 'podium-3' },
-      { key: 'fourthPlace', rank: 4, label: '殿軍', en: '4TH PLACE', medal: '④', name: tData.fourthPlace, cls: 'podium-4' },
-    ].filter((p) => p.name);
+      { key: 'thirdPlace', rank: 3, label: '季軍', en: '3RD PLACE', medal: '🥉', name: thirdPlace, cls: 'podium-3' },
+      { key: 'fourthPlace', rank: 4, label: '殿軍', en: '4TH PLACE', medal: '④', name: fourthPlace, cls: 'podium-4' },
+    ].filter((p) => p.name && p.name !== BYE);
     html += `<div class="podium-banner"><div class="podium-title"><span>🏆</span><strong>最終名次</strong><small>FINAL RANKING</small></div><div class="podium-grid">${podium.map((p) => `<div class="podium-card ${p.cls}"><div class="podium-rank">${p.medal}</div><div class="podium-label">${p.label} <span>${p.en}</span></div><div class="podium-name">${CX.esc(p.name)}</div><div class="podium-number">NO.${p.rank}</div></div>`).join('')}</div></div>`;
   }
 
