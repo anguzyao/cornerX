@@ -54,16 +54,28 @@ export function buildRoundRanking(data) {
   add(data.thirdPlace);
   add(data.fourthPlace);
 
-  // 雙淘汰沒有季軍賽時，依最後淘汰位置補足 3 / 4 名。
-  if (!data.thirdPlace && data.grandFinal) {
-    const gf = (data.matches || []).find((m) => m.id === data.grandFinal && m.status === 'done');
+  // 雙敗賽：總決賽完成後，從實際敗部晉級連線判定第 3、4 名。
+  // 第 3 名 = 敗部決賽（送勝者進 Grand Final 的最後一場 LB）敗者。
+  // 第 4 名 = 敗部決賽前一場、其勝者晉級敗部決賽的 LB 比賽敗者。
+  // 不依賴畫面順序或單純挑最大 round，避免同一輪多場比賽時抓錯人。
+  if ((!data.thirdPlace || !data.fourthPlace) && data.grandFinal) {
+    const matches = data.matches || [];
+    const gf = matches.find((m) => m.id === data.grandFinal && m.status === 'done');
     if (gf) {
-      const lbFinal = [...(data.matches || [])].filter((m) => m.stage === 'LB' && m.status === 'done')
-        .sort((a, b) => (b.round || 0) - (a.round || 0))[0];
-      if (lbFinal) add(lbFinal.loser);
-      const wbFinal = [...(data.matches || [])].filter((m) => m.stage === 'WB' && m.round === Math.max(...(data.matches || []).filter(x => x.stage === 'WB').map(x => x.round || 0)))
-        .find((m) => m.status === 'done');
-      if (wbFinal) add(wbFinal.loser);
+      const lbFinal = matches.find((m) =>
+        m.stage === 'LB' && m.status === 'done' &&
+        m.feedsWinnerTo && m.feedsWinnerTo.matchId === data.grandFinal
+      );
+      if (lbFinal) {
+        add(lbFinal.loser);
+        if (!data.fourthPlace) {
+          const lbPreFinal = matches.find((m) =>
+            m.stage === 'LB' && m.status === 'done' && m.id !== lbFinal.id &&
+            m.feedsWinnerTo && m.feedsWinnerTo.matchId === lbFinal.id
+          );
+          if (lbPreFinal) add(lbPreFinal.loser);
+        }
+      }
     }
   }
 
