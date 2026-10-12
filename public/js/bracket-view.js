@@ -73,14 +73,23 @@ function matchCardHtml(m, editable, orderMap, currentMatchId) {
   return `<div class="${cls}" data-match-id="${m.id}">${orderHtml}${rows.join('')}</div>`;
 }
 
+function isByeMatch(m) {
+  // 輪空場次只隱藏於畫面，不刪除賽程資料或影響自動晉級。
+  return m.playerA === BYE || m.playerB === BYE;
+}
+
 function stageColumnsHtml(matchesInStage, editable, roundLabelFn, orderMap, currentMatchId) {
-  const cols = groupByRound(matchesInStage);
+  // 僅顯示真正需要對戰的場次；保留原始 round、match id 與後端資料。
+  const cols = groupByRound(matchesInStage)
+    .map((col) => col.filter((m) => !isByeMatch(m)))
+    .filter((col) => col.length > 0);
+  if (!cols.length) return '<div class="bracket-scroll"><div class="bracket"><div class="cx-tree-empty">目前沒有需要進行的對戰</div></div></div>';
   const connectorMode = cols.length > 1 ? ' bracket-with-connectors' : '';
   return `<div class="bracket-scroll"><div class="bracket${connectorMode}" data-bracket-connectors="true">${cols
     .map((col, i) => {
       const connect = i < cols.length - 1 ? 'connect' : '';
-      return `<div class="bracket-col bracket-round ${connect}" data-round-index="${i}"><div class="col-label">${roundLabelFn(col[0].round, cols.length)}</div><div class="bracket-round-matches">${col
-        .map((m, j) => `<div class="bracket-match-wrap" data-match-index="${j}" data-match-id="${m.id}">${matchCardHtml(m, editable, orderMap, currentMatchId)}</div>`)
+      return `<div class="bracket-col bracket-round ${connect}" data-round-index="${i}"><div class="col-label">${roundLabelFn(col[0].round, groupByRound(matchesInStage).length)}</div><div class="bracket-round-matches">${col
+        .map((m, j) => `<div class="bracket-match-wrap" data-match-index="${j}" data-match-id="${m.id}" data-feed-winner-to="${m.feedsWinnerTo?.matchId || ''}">${matchCardHtml(m, editable, orderMap, currentMatchId)}</div>`)
         .join('')}</div></div>`;
     })
     .join('')}<svg class="bracket-connectors" aria-hidden="true"></svg></div></div>`;
@@ -101,28 +110,27 @@ function drawBracketConnectors(root) {
   svg.innerHTML = '';
 
   const ns = 'http://www.w3.org/2000/svg';
-  for (let r = 0; r < cols.length - 1; r++) {
-    const from = Array.from(cols[r].querySelectorAll('.bracket-match-wrap'));
-    const to = Array.from(cols[r + 1].querySelectorAll('.bracket-match-wrap'));
-    if (!from.length || !to.length) continue;
-
-    from.forEach((wrap, i) => {
-      const target = to[Math.floor(i / 2)];
-      if (!target) return;
-      const a = wrap.getBoundingClientRect();
-      const b = target.getBoundingClientRect();
-      const x1 = a.right - rect.left;
-      const y1 = a.top + a.height / 2 - rect.top;
-      const x2 = b.left - rect.left;
-      const y2 = b.top + b.height / 2 - rect.top;
-      const mid = x1 + Math.max(10, (x2 - x1) / 2);
-
-      const path = document.createElementNS(ns, 'path');
-      path.setAttribute('d', `M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`);
-      path.setAttribute('class', 'bracket-connector-line');
-      svg.appendChild(path);
-    });
-  }
+  const visibleMatches = Array.from(root.querySelectorAll('.bracket-match-wrap'));
+  const byId = new Map(visibleMatches.map((el) => [el.dataset.matchId, el]));
+  visibleMatches.forEach((wrap) => {
+    const targetId = wrap.dataset.feedWinnerTo;
+    const target = targetId ? byId.get(targetId) : null;
+    if (!target) return;
+    const sourceRound = Number(wrap.closest('.bracket-round')?.dataset.roundIndex ?? -1);
+    const targetRound = Number(target.closest('.bracket-round')?.dataset.roundIndex ?? -1);
+    if (targetRound <= sourceRound) return;
+    const a = wrap.getBoundingClientRect();
+    const b = target.getBoundingClientRect();
+    const x1 = a.right - rect.left;
+    const y1 = a.top + a.height / 2 - rect.top;
+    const x2 = b.left - rect.left;
+    const y2 = b.top + b.height / 2 - rect.top;
+    const mid = x1 + Math.max(10, (x2 - x1) / 2);
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', `M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`);
+    path.setAttribute('class', 'bracket-connector-line');
+    svg.appendChild(path);
+  });
 }
 
 function refreshBracketConnectors(container) {
