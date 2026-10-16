@@ -1089,3 +1089,46 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
     stroke: rgba(105, 122, 148, .48);
   }
 }
+
+/* V34 — stronger top-four leaderboard glow; fourth place uses esports green.
+   Shared by organizer and spectator pages through the common stylesheet. */
+.overall-row.top-1 {
+  border-color: rgba(255, 193, 64, .98) !important;
+  box-shadow: 0 0 10px rgba(255, 193, 64, .48), 0 0 30px rgba(255, 174, 51, .34), 0 0 48px rgba(255, 174, 51, .16), inset 0 0 24px rgba(255, 209, 102, .10) !important;
+  animation: cx-rank-gold-v34 2.2s ease-in-out infinite !important;
+}
+.overall-row.top-2 {
+  border-color: rgba(224, 232, 240, .92) !important;
+  box-shadow: 0 0 9px rgba(215, 222, 230, .34), 0 0 26px rgba(215, 222, 230, .23), 0 0 42px rgba(215, 222, 230, .10), inset 0 0 22px rgba(224, 230, 238, .07) !important;
+  animation: cx-rank-silver-v34 2.35s ease-in-out infinite !important;
+}
+.overall-row.top-3 {
+  border-color: rgba(238, 151, 72, .96) !important;
+  box-shadow: 0 0 9px rgba(229, 139, 66, .38), 0 0 26px rgba(205, 127, 50, .27), 0 0 42px rgba(205, 127, 50, .12), inset 0 0 22px rgba(229, 139, 66, .08) !important;
+  animation: cx-rank-bronze-v34 2.45s ease-in-out infinite !important;
+}
+.overall-row.top-4 {
+  border-color: rgba(57, 255, 136, .96) !important;
+  box-shadow: 0 0 9px rgba(57, 255, 136, .38), 0 0 27px rgba(57, 255, 136, .27), 0 0 44px rgba(57, 255, 136, .13), inset 0 0 22px rgba(57, 255, 136, .075) !important;
+  animation: cx-rank-green-v34 2.5s ease-in-out infinite !important;
+}
+.overall-row.top-4 .overall-rank { color: #39ff88 !important; text-shadow: 0 0 10px rgba(57, 255, 136, .45); }
+@keyframes cx-rank-gold-v34 {
+  0%, 100% { box-shadow: 0 0 8px rgba(255,193,64,.34), 0 0 24px rgba(255,174,51,.20), 0 0 38px rgba(255,174,51,.08), inset 0 0 18px rgba(255,209,102,.05); }
+  50% { box-shadow: 0 0 14px rgba(255,193,64,.62), 0 0 38px rgba(255,174,51,.42), 0 0 58px rgba(255,174,51,.20), inset 0 0 28px rgba(255,209,102,.12); }
+}
+@keyframes cx-rank-silver-v34 {
+  0%, 100% { box-shadow: 0 0 7px rgba(215,222,230,.23), 0 0 20px rgba(215,222,230,.13), 0 0 34px rgba(215,222,230,.05), inset 0 0 16px rgba(224,230,238,.035); }
+  50% { box-shadow: 0 0 13px rgba(224,232,240,.48), 0 0 34px rgba(215,222,230,.31), 0 0 52px rgba(215,222,230,.13), inset 0 0 25px rgba(224,230,238,.09); }
+}
+@keyframes cx-rank-bronze-v34 {
+  0%, 100% { box-shadow: 0 0 7px rgba(229,139,66,.25), 0 0 20px rgba(205,127,50,.15), 0 0 34px rgba(205,127,50,.06), inset 0 0 16px rgba(229,139,66,.035); }
+  50% { box-shadow: 0 0 13px rgba(238,151,72,.50), 0 0 34px rgba(205,127,50,.33), 0 0 52px rgba(205,127,50,.14), inset 0 0 25px rgba(229,139,66,.09); }
+}
+@keyframes cx-rank-green-v34 {
+  0%, 100% { box-shadow: 0 0 7px rgba(57,255,136,.24), 0 0 20px rgba(57,255,136,.14), 0 0 34px rgba(57,255,136,.06), inset 0 0 16px rgba(57,255,136,.035); }
+  50% { box-shadow: 0 0 14px rgba(57,255,136,.55), 0 0 36px rgba(57,255,136,.36), 0 0 56px rgba(57,255,136,.17), inset 0 0 26px rgba(57,255,136,.10); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overall-row.top-1, .overall-row.top-2, .overall-row.top-3, .overall-row.top-4 { animation: none !important; }
+}
