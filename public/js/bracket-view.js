@@ -346,6 +346,28 @@ function openScoreModal(match, onSubmit, onQuickWinner) {
   });
 }
 
+function openTeamScoreModal(match, teams, onSubmit) {
+  const teamA = teams?.[match.playerA], teamB = teams?.[match.playerB];
+  if (!teamA || !teamB) { CX.toast('隊伍名單讀取失敗，請重新整理'); return; }
+  const mask=document.createElement('div');mask.className='modal-mask center';
+  const side=(team,side)=>`<div class="team-score-side"><h4>${CX.esc(team.name)}</h4><div class="hint">${team.members.length} 位團員・輸入各自比分</div>${team.members.map((name,i)=>`<label class="team-score-member"><span>${CX.esc(name)}</span><input type="number" inputmode="numeric" min="0" step="1" data-member="${CX.esc(name)}" data-side="${side}" value="0"></label>`).join('')}<div class="team-score-total">團隊總分 <strong data-total="${side}">0</strong></div></div>`;
+  mask.innerHTML=`<div class="modal-sheet result-modal team-result-modal" style="position:relative;max-height:88vh;overflow:auto"><button class="modal-close" type="button" aria-label="關閉">✕</button><h3>團體賽比分</h3><div class="hint">輸入每位團員的比分，系統自動加總；總分較高的隊伍晉級。</div><div class="team-score-grid">${side(teamA,'A')}<div class="result-vs">VS</div>${side(teamB,'B')}</div><div class="team-score-error" hidden></div><div class="modal-actions"><button class="btn btn-secondary" id="team-score-cancel">取消</button><button class="btn btn-primary" id="team-score-save">確認比分並晉級</button></div></div>`;
+  document.body.appendChild(mask);
+  const close=()=>mask.remove();mask.querySelector('.modal-close').onclick=close;mask.querySelector('#team-score-cancel').onclick=close;
+  const update=()=>{for(const sideName of ['A','B']){let sum=0;mask.querySelectorAll(`input[data-side="${sideName}"]`).forEach(input=>{const n=Number(input.value);sum+=Number.isFinite(n)&&n>=0?Math.floor(n):0;});mask.querySelector(`[data-total="${sideName}"]`).textContent=String(sum);}};
+  mask.querySelectorAll('input[data-member]').forEach(input=>input.addEventListener('input',update));update();
+  mask.querySelector('#team-score-save').onclick=async()=>{
+    const scores={};let invalid=false;
+    mask.querySelectorAll('input[data-member]').forEach(input=>{const raw=input.value;const n=Number(raw);if(raw===''||!Number.isFinite(n)||n<0||!Number.isInteger(n))invalid=true;scores[input.dataset.member]=n;});
+    const sumA=teamA.members.reduce((sum,n)=>sum+(scores[n]||0),0),sumB=teamB.members.reduce((sum,n)=>sum+(scores[n]||0),0);
+    const error=mask.querySelector('.team-score-error');
+    if(invalid){error.hidden=false;error.textContent='每位團員都需要輸入 0 或正整數比分。';return;}
+    if(sumA===sumB){error.hidden=false;error.textContent='兩隊總分相同，請依現場規則決定加賽後再記錄。';return;}
+    const btn=mask.querySelector('#team-score-save');btn.disabled=true;
+    try{await onSubmit(scores,sumA,sumB);close();}catch(e){btn.disabled=false;error.hidden=false;error.textContent=e.message||'記錄失敗';}
+  };
+}
+
 let connectorResizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(connectorResizeTimer);
@@ -354,4 +376,4 @@ window.addEventListener('resize', () => {
   }, 80);
 });
 
-window.CXBracket = { renderBracket, openScoreModal, playerLabel };
+window.CXBracket = { renderBracket, openScoreModal, openTeamScoreModal, playerLabel };

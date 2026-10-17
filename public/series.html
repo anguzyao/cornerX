@@ -49,6 +49,9 @@
 .round-format-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}.round-format-option{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line,rgba(255,255,255,.15));border-radius:12px;cursor:pointer}.round-format-option:has(input:checked){border-color:var(--cyan,#43b7ff);background:rgba(67,183,255,.09)}
 .round-roster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:220px;overflow:auto;padding:2px}.round-roster label{display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:9px;min-width:0;font-weight:500}.round-roster label span{overflow-wrap:anywhere}.round-create-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}.round-roster-tools{display:flex;gap:8px;flex-wrap:wrap}
 @media(max-width:480px){.round-create-sheet{padding:16px}.round-roster{grid-template-columns:1fr}.round-create-actions{flex-direction:column-reverse}.round-create-actions button{width:100%}}
+
+/* V35 — team tournament creation and team-score modal */
+.team-size-options{display:flex;gap:10px;flex-wrap:wrap}.team-size-options label{display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--panel);font-weight:700}.team-method-row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}.team-name-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}.team-name-field{display:grid;gap:6px}.team-name-field label{font-size:12px;color:var(--muted)}.team-name-field input{width:100%;min-width:0}.team-player-assignments{display:grid;gap:8px;margin-top:12px}.team-player-assignment{display:grid;grid-template-columns:minmax(0,1fr) minmax(115px,42%);gap:10px;align-items:center;padding:9px 10px;border:1px solid var(--border);border-radius:9px;background:var(--panel)}.team-player-assignment span{overflow-wrap:anywhere;font-weight:600}.team-player-assignment select{width:100%;min-width:0}.team-score-grid{display:grid;grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr);gap:10px;align-items:start;margin:16px 0}.team-score-side{min-width:0;border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--panel)}.team-score-side h4{margin:0 0 6px;font-size:17px;overflow-wrap:anywhere}.team-score-member{display:grid;gap:6px;margin-top:12px;font-size:13px}.team-score-member span{overflow-wrap:anywhere}.team-score-member input{width:100%;min-width:0;min-height:42px}.team-score-total{border-top:1px solid var(--border);margin-top:14px;padding-top:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}.team-score-total strong{font-size:25px;color:var(--text)}.team-score-error{color:#ff7b72;background:rgba(255,90,80,.1);border:1px solid rgba(255,90,80,.3);border-radius:8px;padding:10px;margin-bottom:10px}.team-score-error[hidden]{display:none}@media(max-width:520px){.team-name-grid{grid-template-columns:1fr}.team-score-grid{grid-template-columns:minmax(0,1fr);}.team-score-grid .result-vs{text-align:center;padding:0}.team-score-side{padding:10px}.team-player-assignment{grid-template-columns:minmax(0,1fr) 44%}}
 </style></head>
 <body><div class="shell"><div class="topbar"><a class="back-btn" href="/">←</a><div><div class="eyebrow">PRIVATE CONTROL</div><div class="page-title" id="title">活動</div></div><button class="icon-btn" id="share">↗</button></div><div id="app"><div class="loading">載入中…</div></div></div>
 <script src="/js/app.js"></script><script src="/js/bracket-view.js"></script>
@@ -101,32 +104,66 @@ function openCreateRoundModal(nextNo){
   const roster=Array.isArray(state?.participants)?state.participants:[];
   const mask=document.createElement('div');mask.className='round-create-mask';
   mask.innerHTML=`<section class="round-create-sheet" role="dialog" aria-modal="true" aria-label="新增賽事">
-    <h3>新增賽事</h3><div class="hint">本場可獨立選擇賽制與參賽名單。未參加本場的選手會保留既有積分。</div>
-    <div class="round-create-field"><label for="round-name">賽事名稱</label><input id="round-name" type="text" maxlength="80" value="第 ${nextNo} 場" placeholder="例如：公開組、進階組"></div>
-    <div class="round-create-field"><label>淘汰賽制</label><div class="round-format-options"><label class="round-format-option"><input type="radio" name="round-format" value="single" checked><span><strong>單淘汰</strong><br><small>輸一場即淘汰</small></span></label><label class="round-format-option"><input type="radio" name="round-format" value="double"><span><strong>雙敗淘汰</strong><br><small>輸兩場才淘汰</small></span></label></div></div>
-    <div class="round-create-field"><label>本場參賽選手</label><div class="round-roster-tools"><button type="button" class="btn btn-secondary btn-sm" id="roster-all">全選</button><button type="button" class="btn btn-secondary btn-sm" id="roster-none">全不選</button></div><div class="round-roster" id="round-roster">${roster.map(p=>`<label><input type="checkbox" value="${CX.esc(p.name)}" checked><span>${CX.esc(p.name)}</span></label>`).join('')}</div><div class="hint">取消勾選代表本場缺席，不會刪除選手或歷史積分。</div></div>
-    <div class="round-create-field"><label for="round-new-players">新增選手（每行一位）</label><textarea id="round-new-players" rows="3" placeholder="輸入本場新加入的選手名稱，一行一位"></textarea><div class="hint">新選手會加入活動總排行榜，從本場開始累積積分，不會補算先前賽事。</div></div>
-    <div class="round-create-actions"><button class="btn btn-secondary" id="round-cancel">取消</button><button class="btn btn-primary" id="round-create-submit">建立賽事</button></div>
+    <h3>新增比賽</h3><div class="hint">選擇個人賽或團體賽。未參加本場的選手仍保留歷史積分。</div>
+    <div class="round-create-field"><label for="round-name">比賽名稱</label><input id="round-name" type="text" maxlength="80" value="第 ${nextNo} 場"></div>
+    <div class="round-create-field"><label>賽制</label><div class="round-format-options"><label class="round-format-option"><input type="radio" name="round-format" value="single" checked><span><strong>單淘汰</strong><br><small>個人賽</small></span></label><label class="round-format-option"><input type="radio" name="round-format" value="double"><span><strong>雙淘汰</strong><br><small>個人賽</small></span></label><label class="round-format-option"><input type="radio" name="round-format" value="team"><span><strong>團體賽</strong><br><small>團隊單淘汰</small></span></label></div></div>
+    <div id="team-options" hidden><div class="round-create-field"><label>團體人數</label><div class="team-size-options"><label><input type="radio" name="team-size" value="2" checked> 雙人組</label><label><input type="radio" name="team-size" value="3"> 三人組</label></div></div></div>
+    <div class="round-create-field"><label>參賽選手</label><div class="round-roster-tools"><button type="button" class="btn btn-secondary btn-sm" id="roster-all">全選</button><button type="button" class="btn btn-secondary btn-sm" id="roster-none">全不選</button></div><div class="round-roster" id="round-roster">${roster.map(p=>`<label><input type="checkbox" value="${CX.esc(p.name)}" checked><span>${CX.esc(p.name)}</span></label>`).join('')}</div></div>
+    <div class="round-create-field"><label for="round-new-players">新增選手（每行一位）</label><textarea id="round-new-players" rows="3" placeholder="輸入本場新加入的選手名稱，一行一位"></textarea></div>
+    <div id="team-builder" hidden><div class="round-create-field"><div class="team-method-row"><button type="button" class="btn btn-secondary btn-sm" id="team-manual">手動分隊</button><button type="button" class="btn btn-primary btn-sm" id="team-random">🎲 隨機分隊</button></div><div class="hint">預設 A小隊、B小隊……。可直接編輯隊名，並用每位選手旁的選單手動調整分隊。</div><div id="team-assignment-area"></div></div></div>
+    <div class="round-create-actions"><button class="btn btn-secondary" id="round-cancel">取消</button><button class="btn btn-primary" id="round-create-submit">建立比賽</button></div>
   </section>`;
   document.body.appendChild(mask);
   const close=()=>mask.remove();
+  let method='manual';
   mask.querySelector('#round-cancel').onclick=close;
   mask.addEventListener('click',e=>{if(e.target===mask)close()});
-  mask.querySelector('#roster-all').onclick=()=>mask.querySelectorAll('#round-roster input[type=checkbox]').forEach(x=>x.checked=true);
-  mask.querySelector('#roster-none').onclick=()=>mask.querySelectorAll('#round-roster input[type=checkbox]').forEach(x=>x.checked=false);
+  mask.querySelector('#roster-all').onclick=()=>{mask.querySelectorAll('#round-roster input[type=checkbox]').forEach(x=>x.checked=true);updateTeamBuilder()};
+  mask.querySelector('#roster-none').onclick=()=>{mask.querySelectorAll('#round-roster input[type=checkbox]').forEach(x=>x.checked=false);updateTeamBuilder()};
+  mask.querySelectorAll('input[name="round-format"]').forEach(x=>x.onchange=()=>{const team=x.value==='team'&&x.checked;mask.querySelector('#team-options').hidden=!team;mask.querySelector('#team-builder').hidden=!team;updateTeamBuilder()});
+  mask.querySelectorAll('input[name="team-size"]').forEach(x=>x.onchange=updateTeamBuilder);
+  mask.querySelector('#round-roster').onchange=updateTeamBuilder;
+  mask.querySelector('#round-new-players').oninput=updateTeamBuilder;
+  mask.querySelector('#team-manual').onclick=()=>{method='manual';updateTeamBuilder()};
+  mask.querySelector('#team-random').onclick=()=>{method='random';updateTeamBuilder(true)};
+  function selectedPlayers(){
+    const picked=[...mask.querySelectorAll('#round-roster input[type=checkbox]:checked')].map(x=>x.value);
+    const added=mask.querySelector('#round-new-players').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    return [...picked,...added];
+  }
+  function updateTeamBuilder(randomize=false){
+    if(mask.querySelector('input[name="round-format"]:checked')?.value!=='team')return;
+    const players=selectedPlayers(), size=Number(mask.querySelector('input[name="team-size"]:checked')?.value||2), count=Math.ceil(players.length/size), area=mask.querySelector('#team-assignment-area');
+    let order=players.slice();
+    if(randomize){for(let i=order.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]];}}
+    area.innerHTML=`<div class="team-name-grid">${Array.from({length:count},(_,i)=>`<div class="team-name-field"><label>隊伍 ${i+1}</label><input data-team-name="${i}" value="${String.fromCharCode(65+i)}小隊" /></div>`).join('')}</div><div class="team-player-assignments">${order.map((name,i)=>`<div class="team-player-assignment"><span>${CX.esc(name)}</span><select data-player-index="${i}" data-player-value="${CX.esc(name)}">${Array.from({length:count},(_,ti)=>`<option value="${ti}" ${Math.min(Math.floor(i/size),count-1)===ti?'selected':''}>${String.fromCharCode(65+ti)}小隊</option>`).join('')}</select></div>`).join('')}</div>`;
+    area.querySelectorAll('[data-team-name]').forEach(inp=>inp.oninput=()=>{const i=Number(inp.dataset.teamName);area.querySelectorAll(`[data-player-index] option[value="${i}"]`).forEach(o=>o.textContent=inp.value.trim()||`${String.fromCharCode(65+i)}小隊`)});
+  }
   mask.querySelector('#round-create-submit').onclick=async()=>{
     const btn=mask.querySelector('#round-create-submit');btn.disabled=true;
     const name=mask.querySelector('#round-name').value.trim();
     const format=mask.querySelector('input[name="round-format"]:checked')?.value||'single';
-    const players=[...mask.querySelectorAll('#round-roster input[type=checkbox]:checked')].map(x=>x.value);
-    const newPlayers=mask.querySelector('#round-new-players').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-    const allPlayers=[...players,...newPlayers];
-    if(!name){CX.toast('請輸入賽事名稱');btn.disabled=false;return}
-    if(allPlayers.length<2){CX.toast('本場至少需要 2 位參賽者');btn.disabled=false;return}
-    if(new Set(allPlayers).size!==allPlayers.length){CX.toast('參賽名單有重複名稱，請檢查勾選名單與新增名單');btn.disabled=false;return}
+    const players=selectedPlayers();
+    if(!name){CX.toast('請輸入比賽名稱');btn.disabled=false;return}
+    if(new Set(players).size!==players.length){CX.toast('參賽名單有重複名稱，請檢查');btn.disabled=false;return}
     try{
-      const res=await api(`/series/${id}/rounds`,{method:'POST',body:{name,format,players:allPlayers}});
-      selectedRoundId=res.id;currentTab='round';close();await load();CX.toast(`已建立${format==='double'?'雙敗':'單淘汰'}賽事`);
+      let body;
+      if(format==='team'){
+        const size=Number(mask.querySelector('input[name="team-size"]:checked')?.value||2);
+        if(players.length<size*2){throw new Error('至少需要兩支完整隊伍');}
+        if(players.length%size!==0)throw new Error(`目前有 ${players.length} 位選手，無法平均分成每隊 ${size} 人，請增減選手`);
+        const count=players.length/size, teamList=Array.from({length:count},(_,i)=>({name:mask.querySelector(`[data-team-name="${i}"]`)?.value.trim()||`${String.fromCharCode(65+i)}小隊`,members:[]}));
+        const selectors=[...mask.querySelectorAll('[data-player-index]')];
+        if(selectors.length!==players.length)throw new Error('分隊清單尚未完成，請重新選擇團體賽');
+        selectors.forEach(sel=>{const pname=sel.dataset.playerValue;teamList[Number(sel.value)].members.push(pname)});
+        if(teamList.some(t=>t.members.length!==size))throw new Error(`每隊必須剛好 ${size} 人，請調整分隊`);
+        if(new Set(teamList.map(t=>t.name)).size!==teamList.length)throw new Error('隊伍名稱不可重複');
+        body={name,format:'team',teamSize:size,teams:teamList};
+      }else{
+        if(players.length<2)throw new Error('本場至少需要 2 位參賽者');
+        body={name,format,players};
+      }
+      const res=await api(`/series/${id}/rounds`,{method:'POST',body});selectedRoundId=res.id;currentTab='round';close();await load();CX.toast(format==='team'?'已建立團體單淘汰賽':'已建立比賽');
     }catch(e){btn.disabled=false;CX.toast(e.message)}
   };
   mask.querySelector('#round-name').focus();
@@ -207,7 +244,8 @@ function renderRound(el,r,rounds,active){
   }
   CXBracket.renderBracket(document.getElementById('bracket'),r.data,{editable:editable,onRecord:async mid=>{
     const m=r.data.matches.find(x=>x.id===mid);if(!m)return;
-    CXBracket.openScoreModal(m,async(a,b)=>{try{await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{scoreA:a,scoreB:b}});currentTab='round';selectedRoundId=r.id;await load();}catch(e){CX.toast(e.message);throw e;}},async(slot)=>{try{await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{winner:slot}});currentTab='round';selectedRoundId=r.id;await load();}catch(e){CX.toast(e.message);throw e;}});
+    if(r.data.teamMode){CXBracket.openTeamScoreModal(m,r.data.teams,async(memberScores,scoreA,scoreB)=>{try{await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{scoreA,scoreB,memberScores}});currentTab='round';selectedRoundId=r.id;await load();}catch(e){CX.toast(e.message);throw e;}})}
+    else CXBracket.openScoreModal(m,async(a,b)=>{try{await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{scoreA:a,scoreB:b}});currentTab='round';selectedRoundId=r.id;await load();}catch(e){CX.toast(e.message);throw e;}},async(slot)=>{try{await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{winner:slot}});currentTab='round';selectedRoundId=r.id;await load();}catch(e){CX.toast(e.message);throw e;}});
   }});
   document.getElementById('bracket').appendChild(renderCallPanel(r));
 }
