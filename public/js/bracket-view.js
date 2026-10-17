@@ -2,6 +2,14 @@
 // 依賴 app.js (CX)
 
 const BYE = '__BYE__';
+let activeTeamMap = null;
+
+function playerDisplayHtml(name) {
+  const safeName = CX.esc(playerLabel(name));
+  const team = activeTeamMap && activeTeamMap[name];
+  if (!team || !Array.isArray(team.members) || !team.members.length) return `<span class="pname-wrap"><span class="pname">${safeName}</span></span>`;
+  return `<span class="pname-wrap team-player-wrap"><span class="pname">${safeName}</span><span class="team-members">隊員：${team.members.map(CX.esc).join('、')}</span></span>`;
+}
 
 function playerLabel(name) {
   if (name === BYE) return '（輪空）';
@@ -63,7 +71,7 @@ function matchCardHtml(m, editable, orderMap, currentMatchId) {
     const isBye = name === BYE;
     const cls = ['match-row', isWinner ? 'winner' : '', isBye ? 'bye' : ''].filter(Boolean).join(' ');
     const scoreHtml = m.status === 'done' && m.resultMode === 'winner' && m.winner === name ? `<span class="pscore quick-win-label">勝</span>` : (m.status === 'done' && score !== null && score !== undefined ? `<span class="pscore">${score}</span>` : '');
-    return `<div class="${cls}"><span class="pname">${CX.esc(playerLabel(name))}</span>${scoreHtml}</div>`;
+    return `<div class="${cls}">${playerDisplayHtml(name)}${scoreHtml}</div>`;
   });
   const clickable = editable && m.status === 'ready' && isPlayableMatch(m);
   const isCurrent = currentMatchId === m.id;
@@ -173,9 +181,9 @@ function livePrepHtml(currentMatch, nextMatch, orderMap) {
     return `<div class="cx-live-card ${kind === 'current' ? 'is-current' : 'is-next'}">
       <div class="cx-live-kicker">${kind === 'current' ? 'CURRENT MATCH · 現在進行' : 'NEXT MATCH · 下一場準備'}</div>
       <div class="cx-live-order">第 ${order} 場</div>
-      <div class="cx-live-player">${CX.esc(playerLabel(m.playerA))}</div>
+      <div class="cx-live-player">${playerDisplayHtml(m.playerA)}</div>
       <div class="cx-live-vs">VS</div>
-      <div class="cx-live-player">${CX.esc(playerLabel(m.playerB))}</div>
+      <div class="cx-live-player">${playerDisplayHtml(m.playerB)}</div>
     </div>`;
   };
   return `<div class="cx-live-prep"><div class="cx-live-title"><span>LIVE CONTROL</span><strong>現在進行 / 下一場準備</strong></div><div class="cx-live-grid">${card(currentMatch,'current')}${card(nextMatch,'next')}</div></div>`;
@@ -202,6 +210,7 @@ function renderTreeBracket(wb, editable, orderMap, currentMatchId, currentMatch,
 
 function renderBracket(container, tData, opts) {
   const editable = !!opts.editable;
+  activeTeamMap = tData.teamMode && tData.teams ? tData.teams : null;
   const matches = tData.matches;
   const orderMap = getMatchOrder(matches);
   const currentMatch = findCurrentMatch(matches);

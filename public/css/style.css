@@ -1132,3 +1132,20 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
 @media (prefers-reduced-motion: reduce) {
   .overall-row.top-1, .overall-row.top-2, .overall-row.top-3, .overall-row.top-4 { animation: none !important; }
 }
+
+
+/* V37 — Team member names in manager and spectator displays */
+.pname-wrap{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;flex:1;min-width:0;overflow:hidden}
+.match-row .pname-wrap .pname{display:block;width:100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.team-members{display:block;font-size:10px;line-height:1.35;font-weight:600;color:var(--muted,#8996a8);white-space:normal;overflow-wrap:anywhere}
+.match-row .team-members{max-width:100%}
+.cx-live-player{white-space:normal;overflow:visible;text-overflow:clip}
+.cx-live-player .pname-wrap{width:100%;align-items:flex-start}
+.cx-live-player .pname{font-size:inherit;font-weight:inherit;color:inherit}
+.cx-live-player .team-members{font-size:12px;margin-top:3px}
+.call-team-players{display:grid;gap:7px;white-space:normal;overflow:visible;text-overflow:clip}
+.call-team-players>div{min-width:0;overflow-wrap:anywhere}
+.call-vs-inline{font-size:11px;color:var(--muted,#8996a8);font-weight:800}
+.call-team-members{font-size:12px;margin-top:3px}
+.call-modal .call-team-members{font-size:14px;margin-top:0;margin-bottom:7px}
+@media(max-width:560px){.call-team-players{gap:5px}.call-team-members{font-size:11px}.match-row .team-members{font-size:9px}}

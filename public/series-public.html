@@ -49,6 +49,8 @@
 @keyframes callFadeIn{from{opacity:0}to{opacity:1}}
 @keyframes callPulse{from{transform:scale(1);box-shadow:0 0 0 1px rgba(255,174,0,.12),0 0 35px rgba(255,166,0,.14)}to{transform:scale(1.012);box-shadow:0 0 0 1px rgba(255,174,0,.2),0 0 65px rgba(255,166,0,.28)}}
 @media(max-width:520px){.call-modal{padding:28px 18px}.call-no{font-size:34px}.call-player{font-size:23px}}
+.call-team-members{font-size:14px;line-height:1.5;color:#aeb9c8;font-weight:650;margin:-2px 0 8px;overflow-wrap:anywhere}
+@media(max-width:520px){.call-team-members{font-size:12px}}
 </style></head>
 <body><div id="voice-gate" class="voice-gate"><div class="voice-gate-card"><div class="voice-gate-icon">🔊</div><div class="voice-gate-title">現場叫號語音</div><p class="voice-gate-sub">進入觀眾模式前，請先播放測試語音。請確認本裝置可以聽到聲音，之後才能進入觀眾畫面。</p><button class="btn btn-primary voice-gate-test" id="voice-gate-test">🔊 播放測試語音</button><div class="voice-gate-status" id="voice-gate-status">尚未測試</div><button class="btn btn-secondary voice-gate-enter" id="voice-gate-enter" disabled>進入觀眾模式</button><div class="voice-gate-note">測試內容：「叫號語音已啟用。」<br>若沒有聲音，請先確認裝置音量與靜音模式。</div></div></div><div class="shell public-shell"><div class="brand"><div class="brand-logo"><img src="/assets/corner-x-logo.png" alt="Corner X"></div><div class="brand-copy"><div class="brand-name">Corner X</div><div class="sub">線上賽程及排行榜系統</div></div></div><div id="app"><div class="loading">載入中…</div></div></div>
 <script src="/js/app.js"></script><script src="/js/bracket-view.js"></script><script>
@@ -100,13 +102,15 @@ function enableCallVoice(){
 }
 function speakCall(call){
   if(!speechEnabled)return;
-  const text=`第${call.matchNo}場。${call.playerA}、${call.playerB}。請準備比賽。`;
+  const membersText=(team,members)=>members?.length?`${team}，隊員${members.join('、')}`:team;
+  const text=`第${call.matchNo}場。${membersText(call.playerA,call.membersA)}。對戰。${membersText(call.playerB,call.membersB)}。請準備比賽。`;
   speakText(text);
 }
 function showCall(call){
   const overlay=document.getElementById('call-overlay'); if(!overlay)return;
   overlay.classList.remove('hidden');
-  overlay.innerHTML=`<div class="call-modal"><div class="call-icon">📢</div><div class="call-title">MATCH CALL · 比賽叫號</div><div class="call-no">第 ${call.matchNo} 場</div><div class="call-player">${CX.esc(call.playerA)}</div><div class="call-vs">VS</div><div class="call-player">${CX.esc(call.playerB)}</div><div class="call-hint">請選手準備比賽</div><button class="btn btn-secondary call-close" id="call-close">關閉</button></div>`;
+  const membersHtml=(members)=>members?.length?`<div class="call-team-members">隊員：${members.map(CX.esc).join('、')}</div>`:'';
+  overlay.innerHTML=`<div class="call-modal"><div class="call-icon">📢</div><div class="call-title">MATCH CALL · 比賽叫號</div><div class="call-no">第 ${call.matchNo} 場</div><div class="call-player">${CX.esc(call.playerA)}</div>${membersHtml(call.membersA)}<div class="call-vs">VS</div><div class="call-player">${CX.esc(call.playerB)}</div>${membersHtml(call.membersB)}<div class="call-hint">請選手準備比賽</div><button class="btn btn-secondary call-close" id="call-close">關閉</button></div>`;
   overlay.querySelector('#call-close').onclick=()=>overlay.classList.add('hidden');
   speakCall(call);
 }

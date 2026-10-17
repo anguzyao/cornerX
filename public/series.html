@@ -216,7 +216,9 @@ function renderCallPanel(r){
     const order=callMatchOrder(r.data.matches).findIndex(m=>m.id===target.id)+1;
     const called=calls.some(c=>c&&c.matchId===target.id);
     const item=document.createElement('div'); item.className='call-item';
-    item.innerHTML=`<div class="call-item-main"><div class="call-match-no">第 ${order} 場</div><div class="call-players">${CX.esc(target.playerA)}　VS　${CX.esc(target.playerB)}</div><div class="call-status">${called?'已叫號，可再次播送。':'等待叫號。'}</div></div><button class="btn btn-primary call-btn ${called?'called':''}">${called?'🔊 再次叫號':'📢 叫號'}</button>`;
+    const teamA=r.data.teamMode?r.data.teams?.[target.playerA]:null, teamB=r.data.teamMode?r.data.teams?.[target.playerB]:null;
+    const displayTeam=(name,team)=>`${CX.esc(name)}${team?.members?.length?`<span class="team-members call-team-members">隊員：${team.members.map(CX.esc).join('、')}</span>`:''}`;
+    item.innerHTML=`<div class="call-item-main"><div class="call-match-no">第 ${order} 場</div><div class="call-players call-team-players"><div>${displayTeam(target.playerA,teamA)}</div><span class="call-vs-inline">VS</span><div>${displayTeam(target.playerB,teamB)}</div></div><div class="call-status">${called?'已叫號，可再次播送。':'等待叫號。'}</div></div><button class="btn btn-primary call-btn ${called?'called':''}">${called?'🔊 再次叫號':'📢 叫號'}</button>`;
     item.querySelector('.call-btn').onclick=async()=>{
       const btn=item.querySelector('.call-btn'); btn.disabled=true;
       try{

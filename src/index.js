@@ -588,6 +588,8 @@ app.post('/api/series/:id/rounds/:roundId/call', async (c) => {
     matchNo,
     playerA,
     playerB,
+    membersA: data.teamMode ? (data.teams?.[playerA]?.members || []) : [],
+    membersB: data.teamMode ? (data.teams?.[playerB]?.members || []) : [],
     createdAt,
   };
   const calls = Array.isArray(data.calls) ? data.calls.slice() : (data.call ? [data.call] : []);
