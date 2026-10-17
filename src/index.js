@@ -316,23 +316,19 @@ app.post('/api/series', async (c) => {
   const eventDate = String(body.eventDate || '').trim() || null;
   const location = String(body.location || '').trim() || null;
   const players = Array.isArray(body.players) ? body.players.map((p) => String(p).trim()).filter(Boolean) : [];
-  const format = body.format === 'double' ? 'double' : 'single';
   const pointRules = normalizePointRules(body.pointRules || DEFAULT_POINT_RULES);
   if (!name) return jsonError(c, 400, '請輸入活動名稱');
   if (players.length < 2) return jsonError(c, 400, '至少需要 2 位參賽者');
   if (new Set(players).size !== players.length) return jsonError(c, 400, '參賽者名稱不可重複');
-  let data;
-  try { data = createBracket(players, format); } catch (e) { return jsonError(c, 400, e.message); }
   const id = newId('s');
-  const roundId = newId('r');
   const control = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
   const share = newSlug();
   const accessCode = await newAccessCode(c);
   const now = new Date().toISOString();
+  // 活動建立時只儲存基本資料，不預先建立任何賽事；由活動控制台逐場新增賽事。
   const tx = c.env.DB.batch([
-    c.env.DB.prepare('INSERT INTO series (id, workspace_id, name, event_date, location, status, control_token, share_slug, access_code, point_rules, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').bind(id, ws, name, eventDate, location, data.champion ? 'done' : 'ongoing', control, share, accessCode, JSON.stringify(pointRules), now, now),
-    ...players.map((name, i) => c.env.DB.prepare('INSERT INTO series_participants (id, series_id, name, sort_order) VALUES (?,?,?,?)').bind(newId('p'), id, name, i)),
-    c.env.DB.prepare('INSERT INTO series_rounds (id, series_id, round_no, name, format, status, data, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)').bind(roundId, id, 1, '第 1 場', format, data.champion ? 'done' : 'ongoing', JSON.stringify(data), now, now),
+    c.env.DB.prepare('INSERT INTO series (id, workspace_id, name, event_date, location, status, control_token, share_slug, access_code, point_rules, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').bind(id, ws, name, eventDate, location, 'ongoing', control, share, accessCode, JSON.stringify(pointRules), now, now),
+    ...players.map((playerName, i) => c.env.DB.prepare('INSERT INTO series_participants (id, series_id, name, sort_order) VALUES (?,?,?,?)').bind(newId('p'), id, playerName, i)),
   ]);
   await tx;
   return c.json({ id, name, controlToken: control, accessCode, shareSlug: share, controlUrl: `/series.html?id=${encodeURIComponent(id)}&token=${encodeURIComponent(control)}`, shareUrl: `/series-public/${encodeURIComponent(share)}` });
