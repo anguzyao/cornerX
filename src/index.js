@@ -388,29 +388,66 @@ app.post('/api/series/:id/rounds', async (c) => {
   if (row.status === 'done') return jsonError(c, 400, '活動已結束，無法新增場次');
   const body = await c.req.json().catch(() => ({}));
   const participants = await seriesParticipants(c, row.id);
-  const format = body.format === 'double' ? 'double' : 'single';
+  const isTeam = body.format === 'team';
+  const format = isTeam ? 'team' : (body.format === 'double' ? 'double' : 'single');
   const roundName = String(body.name || '').trim() || `第 ${Number(body.roundNo) || 1} 場`;
   const existing = await c.env.DB.prepare('SELECT COALESCE(MAX(round_no),0) AS max_no FROM series_rounds WHERE series_id = ?').bind(row.id).first();
   const roundNo = Number(existing.max_no || 0) + 1;
-
-  // 每一場有獨立名單；未選入本場的既有選手仍保留在活動總排行榜。
-  const requestedPlayers = Array.isArray(body.players)
-    ? body.players.map((p) => String(p || '').trim()).filter(Boolean)
-    : participants.map((p) => p.name);
-  if (requestedPlayers.length < 2) return jsonError(c, 400, '本場至少需要 2 位參賽者');
-  if (new Set(requestedPlayers).size !== requestedPlayers.length) return jsonError(c, 400, '本場參賽者名稱不可重複');
-  const existingByName = new Map(participants.map((p) => [p.name, p]));
-  const newNames = requestedPlayers.filter((name) => !existingByName.has(name));
   let data;
-  try { data = createBracket(requestedPlayers, format); } catch (e) { return jsonError(c, 400, e.message); }
+  if (isTeam) {
+    const teamSize = Number(body.teamSize);
+    const rawTeams = Array.isArray(body.teams) ? body.teams : [];
+    if (![2, 3].includes(teamSize)) return jsonError(c, 400, '團體賽請選擇雙人組或三人組');
+    if (rawTeams.length < 2) return jsonError(c, 400, '至少需要 2 支隊伍');
+    const teams = [];
+    const usedPlayers = new Set();
+    const usedTeamNames = new Set();
+    for (let i = 0; i < rawTeams.length; i++) {
+      const team = rawTeams[i] || {};
+      const name = String(team.name || '').trim() || `${String.fromCharCode(65 + i)}小隊`;
+      const members = Array.isArray(team.members) ? team.members.map((x) => String(x || '').trim()).filter(Boolean) : [];
+      if (members.length !== teamSize) return jsonError(c, 400, `${name} 必須剛好有 ${teamSize} 位團員`);
+      if (usedTeamNames.has(name)) return jsonError(c, 400, '隊伍名稱不可重複');
+      usedTeamNames.add(name);
+      for (const member of members) {
+        if (usedPlayers.has(member)) return jsonError(c, 400, `選手「${member}」被重複分隊`);
+        usedPlayers.add(member);
+      }
+      teams.push({ name, members });
+    }
+    if (teams.length < 2) return jsonError(c, 400, '至少需要 2 支隊伍');
+    try { data = createBracket(teams.map((t) => t.name), 'single'); } catch (e) { return jsonError(c, 400, e.message); }
+    data.teamMode = true;
+    data.teamSize = teamSize;
+    data.teams = Object.fromEntries(teams.map((t) => [t.name, { name: t.name, members: t.members }]));
+    const knownNames = new Set(participants.map((p) => p.name));
+    let sortOrder = participants.length;
+    for (const playerName of usedPlayers) {
+      if (!knownNames.has(playerName)) {
+        await c.env.DB.prepare('INSERT INTO series_participants (id, series_id, name, sort_order) VALUES (?,?,?,?)').bind(newId('p'), row.id, playerName, sortOrder++).run();
+        knownNames.add(playerName);
+      }
+    }
+  } else {
+    // 每一場有獨立名單；未選入本場的既有選手仍保留在活動總排行榜。
+    const requestedPlayers = Array.isArray(body.players)
+      ? body.players.map((p) => String(p || '').trim()).filter(Boolean)
+      : participants.map((p) => p.name);
+    if (requestedPlayers.length < 2) return jsonError(c, 400, '本場至少需要 2 位參賽者');
+    if (new Set(requestedPlayers).size !== requestedPlayers.length) return jsonError(c, 400, '本場參賽者名稱不可重複');
+    const existingByName = new Set(participants.map((p) => p.name));
+    const newNames = requestedPlayers.filter((name) => !existingByName.has(name));
+    try { data = createBracket(requestedPlayers, format); } catch (e) { return jsonError(c, 400, e.message); }
+    if (newNames.length) {
+      const maxSort = participants.reduce((max, p) => Math.max(max, Number(p.sort_order) || 0), -1);
+      await c.env.DB.batch(newNames.map((name, i) => c.env.DB.prepare('INSERT INTO series_participants (id, series_id, name, sort_order) VALUES (?,?,?,?)').bind(newId('p'), row.id, name, maxSort + i + 1)));
+    }
+  }
   const id = newId('r');
   const now = new Date().toISOString();
-  const maxSort = participants.reduce((max, p) => Math.max(max, Number(p.sort_order) || 0), -1);
-  const statements = newNames.map((name, i) => c.env.DB.prepare('INSERT INTO series_participants (id, series_id, name, sort_order) VALUES (?,?,?,?)').bind(newId('p'), row.id, name, maxSort + i + 1));
-  statements.push(c.env.DB.prepare('INSERT INTO series_rounds (id, series_id, round_no, name, format, status, data, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)').bind(id, row.id, roundNo, roundName, format, data.champion ? 'done' : 'ongoing', JSON.stringify(data), now, now));
-  statements.push(c.env.DB.prepare('UPDATE series SET status = ?, updated_at = ? WHERE id = ?').bind('ongoing', now, row.id));
-  await c.env.DB.batch(statements);
-  return c.json({ id, roundNo, name: roundName, format, status: data.champion ? 'done' : 'ongoing', data, players: requestedPlayers, addedParticipants: newNames });
+  await c.env.DB.prepare('INSERT INTO series_rounds (id, series_id, round_no, name, format, status, data, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)').bind(id, row.id, roundNo, roundName, format, data.champion ? 'done' : 'ongoing', JSON.stringify(data), now, now).run();
+  await c.env.DB.prepare('UPDATE series SET status = ?, updated_at = ? WHERE id = ?').bind('ongoing', now, row.id).run();
+  return c.json({ id, roundNo, name: roundName, format, status: data.champion ? 'done' : 'ongoing', data });
 });
 
 async function loadOwnedRound(c) {
@@ -434,10 +471,13 @@ async function saveRoundAndMaybePoints(c, seriesRow, roundRow, data, previousSna
     const byName = new Map(participants.map((p) => [p.name, p]));
     const rules = normalizePointRules(JSON.parse(seriesRow.point_rules));
     for (const item of ranking) {
-      const p = byName.get(item.name);
-      if (!p) continue;
-      const id = newId('rp');
-      await c.env.DB.prepare(`INSERT INTO series_round_points (id, round_id, participant_id, rank, points, source, locked, updated_at) VALUES (?,?,?,?,?,?,0,?) ON CONFLICT(round_id, participant_id) DO UPDATE SET rank=excluded.rank, points=excluded.points, source=excluded.source, updated_at=excluded.updated_at`).bind(id, roundRow.id, p.id, item.rank, pointsForRank(item.rank, rules), 'auto', now).run();
+      const names = data.teamMode ? (data.teams?.[item.name]?.members || []) : [item.name];
+      for (const memberName of names) {
+        const p = byName.get(memberName);
+        if (!p) continue;
+        const id = newId('rp');
+        await c.env.DB.prepare(`INSERT INTO series_round_points (id, round_id, participant_id, rank, points, source, locked, updated_at) VALUES (?,?,?,?,?,?,0,?) ON CONFLICT(round_id, participant_id) DO UPDATE SET rank=excluded.rank, points=excluded.points, source=excluded.source, updated_at=excluded.updated_at`).bind(id, roundRow.id, p.id, item.rank, pointsForRank(item.rank, rules), 'auto', now).run();
+      }
     }
   }
   return status;
@@ -447,6 +487,7 @@ app.post('/api/series/:id/rounds/:roundId/reseed', async (c) => {
   const { series, round } = await loadOwnedRound(c);
   if (!series || !round) return jsonError(c, 404, '找不到這場比賽');
   const current = JSON.parse(round.data);
+  if (current.teamMode) return jsonError(c, 400, '團體賽目前不支援直接重抽對位；請在建立時重新分隊。');
   const hasPlayedMatch = (current.matches || []).some((m) => m.status === 'done' && m.winner && m.playerA !== '__BYE__' && m.playerB !== '__BYE__');
   if (hasPlayedMatch) return jsonError(c, 400, '已有比賽結果，賽程對位已鎖定');
 
@@ -502,7 +543,23 @@ app.post('/api/series/:id/rounds/:roundId/matches/:matchId/result', async (c) =>
   const data = JSON.parse(round.data);
   const previousSnapshot = JSON.stringify(data);
   try {
-    if (body.winner === 'A' || body.winner === 'B') {
+    if (data.teamMode && body.memberScores && (body.winner !== 'A' && body.winner !== 'B')) {
+      const match = data.matches.find((m) => m.id === c.req.param('matchId'));
+      if (!match) throw new Error('找不到這場對戰');
+      const teamA = data.teams?.[match.playerA];
+      const teamB = data.teams?.[match.playerB];
+      if (!teamA || !teamB) throw new Error('隊伍資料不完整');
+      const sumFor = (team) => team.members.reduce((sum, name) => {
+        const n = Number(body.memberScores[name]);
+        if (!Number.isFinite(n) || n < 0) throw new Error(`請輸入 ${name} 的有效比分`);
+        return sum + n;
+      }, 0);
+      const sumA = sumFor(teamA), sumB = sumFor(teamB);
+      if (sumA === sumB) throw new Error('兩隊總分相同，請依活動規則處理平手後再記錄');
+      recordResult(data, match.id, sumA, sumB);
+      const savedMatch = data.matches.find((m) => m.id === match.id);
+      savedMatch.memberScores = { ...body.memberScores };
+    } else if (body.winner === 'A' || body.winner === 'B') {
       recordWinner(data, c.req.param('matchId'), body.winner);
     } else {
       recordResult(data, c.req.param('matchId'), Number(body.scoreA), Number(body.scoreB));
