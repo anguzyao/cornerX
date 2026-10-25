@@ -479,6 +479,30 @@ async function saveRoundAndMaybePoints(c, seriesRow, roundRow, data, previousSna
   return status;
 }
 
+app.delete('/api/series/:id/rounds/:roundId', async (c) => {
+  const { series, round } = await loadOwnedRound(c);
+  if (!series || !round) return jsonError(c, 404, '找不到這場比賽，或私人控制連結無效');
+
+  // 刪除本場積分、復原快照與賽事資料；活動總排行榜會因本場積分移除而自動重算。
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM series_round_points WHERE round_id = ?').bind(round.id),
+    c.env.DB.prepare('DELETE FROM series_round_actions WHERE round_id = ?').bind(round.id),
+    c.env.DB.prepare('DELETE FROM series_rounds WHERE id = ? AND series_id = ?').bind(round.id, series.id),
+  ]);
+
+  // 重新編號，避免刪除中間場次後出現第 1、3、4 場的編號空缺。
+  const { results: remaining } = await c.env.DB.prepare('SELECT id, round_no FROM series_rounds WHERE series_id = ? ORDER BY round_no, created_at').bind(series.id).all();
+  const now = new Date().toISOString();
+  for (let i = 0; i < remaining.length; i++) {
+    const desiredNo = i + 1;
+    if (Number(remaining[i].round_no) !== desiredNo) {
+      await c.env.DB.prepare('UPDATE series_rounds SET round_no = ?, updated_at = ? WHERE id = ?').bind(desiredNo, now, remaining[i].id).run();
+    }
+  }
+  await c.env.DB.prepare('UPDATE series SET status = ?, updated_at = ? WHERE id = ?').bind('ongoing', now, series.id).run();
+  return c.json({ ok: true, deletedRoundId: round.id, deletedRoundName: round.name, remainingRounds: remaining.length });
+});
+
 app.post('/api/series/:id/rounds/:roundId/reseed', async (c) => {
   const { series, round } = await loadOwnedRound(c);
   if (!series || !round) return jsonError(c, 404, '找不到這場比賽');
