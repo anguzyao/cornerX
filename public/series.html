@@ -247,14 +247,14 @@ function renderRound(el,r,rounds,active){
   if(canReseed){
     document.getElementById('randomize').onclick=async()=>{
       if(!confirm('重新隨機後，目前尚未開始的對位會全部重新產生。確定要重新抽籤嗎？'))return;
-      try{await api(`/series/${id}/rounds/${r.id}/reseed`,{method:'POST',body:{mode:'random'}});currentTab='round';selectedRoundId=r.id;await load();CX.toast('已重新隨機排序');}catch(e){CX.toast(e.message)}
+      try{const result=await api(`/series/${id}/rounds/${r.id}/reseed`,{method:'POST',body:{mode:'random'}});currentTab='round';selectedRoundId=r.id;applyRoundResponse(r.id,result);CX.toast('已重新隨機排序');}catch(e){CX.toast(e.message)}
     };
     document.getElementById('manual-seed').onclick=()=>openManualSeedModal(r);
   }
   CXBracket.renderBracket(document.getElementById('bracket'),r.data,{editable:editable,onRecord:async mid=>{
     const m=r.data.matches.find(x=>x.id===mid);if(!m)return;
-    if(r.data.teamMode){CXBracket.openTeamScoreModal(m,r.data.teams,async(memberScores,scoreA,scoreB)=>{try{await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{scoreA,scoreB,memberScores}});currentTab='round';selectedRoundId=r.id;await load();}catch(e){CX.toast(e.message);throw e;}})}
-    else CXBracket.openScoreModal(m,async(a,b)=>{try{await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{scoreA:a,scoreB:b}});currentTab='round';selectedRoundId=r.id;await load();}catch(e){CX.toast(e.message);throw e;}},async(slot)=>{try{await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{winner:slot}});currentTab='round';selectedRoundId=r.id;await load();}catch(e){CX.toast(e.message);throw e;}});
+    if(r.data.teamMode){CXBracket.openTeamScoreModal(m,r.data.teams,async(memberScores,scoreA,scoreB)=>{try{const result=await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{scoreA,scoreB,memberScores}});currentTab='round';selectedRoundId=r.id;if(result.status==='done')await load();else applyRoundResponse(r.id,result);}catch(e){CX.toast(e.message);throw e;}})}
+    else CXBracket.openScoreModal(m,async(a,b)=>{try{const result=await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{scoreA:a,scoreB:b}});currentTab='round';selectedRoundId=r.id;if(result.status==='done')await load();else applyRoundResponse(r.id,result);}catch(e){CX.toast(e.message);throw e;}},async(slot)=>{try{const result=await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{winner:slot}});currentTab='round';selectedRoundId=r.id;if(result.status==='done')await load();else applyRoundResponse(r.id,result);}catch(e){CX.toast(e.message);throw e;}});
   }});
   document.getElementById('bracket').appendChild(renderCallPanel(r));
 }
@@ -266,10 +266,22 @@ function openManualSeedModal(r){
   document.body.appendChild(mask);render();
   const close=()=>mask.remove();mask.querySelector('.modal-close').onclick=close;mask.querySelector('#seed-cancel').onclick=close;
   mask.querySelector('.manual-seed-list').onclick=(e)=>{const btn=e.target.closest('.seed-player');if(!btn)return;const i=Number(btn.dataset.i);if(first===null){first=i;render();return;}if(first===i){first=null;render();return;}[order[first],order[i]]=[order[i],order[first]];first=null;render();};
-  mask.querySelector('#seed-save').onclick=async()=>{try{await api(`/series/${id}/rounds/${r.id}/reseed`,{method:'POST',body:{mode:'manual',players:order}});close();currentTab='round';selectedRoundId=r.id;await load();CX.toast('對位已更新');}catch(e){CX.toast(e.message)}};
+  mask.querySelector('#seed-save').onclick=async()=>{const btn=mask.querySelector('#seed-save');btn.disabled=true;btn.textContent='儲存中…';try{const result=await api(`/series/${id}/rounds/${r.id}/reseed`,{method:'POST',body:{mode:'manual',players:order}});close();currentTab='round';selectedRoundId=r.id;applyRoundResponse(r.id,result);CX.toast('對位已更新');}catch(e){btn.disabled=false;btn.textContent='確認對位';CX.toast(e.message)}};
 }
 async function renderPoints(el,r){if(!r||r.status!=='done'){el.innerHTML='<div class="empty-state">本場完成後會自動產生積分</div>';return} const q=await api(`/series/${id}/rounds/${r.id}/points`);el.innerHTML=`<div class="panel"><div class="section-title">${CX.esc(r.name)} · 積分</div><div class="hint">系統依排名自動帶入，你可以在鎖定前手動修改。</div><div class="points-list">${q.points.map(x=>`<div class="point-row"><span class="rank">${medal(x.rank)}</span><span class="player">${CX.esc(x.name)}</span><input data-pid="${x.participant_id}" type="number" min="0" value="${x.points}" ${q.locked?'disabled':''}><span class="source">${x.source==='manual'?'手動':'自動'}</span></div>`).join('')}</div>${q.locked?'<div class="locked">🔒 本場積分已鎖定</div>':'<button class="btn btn-primary" id="confirm-points">確認並鎖定本場積分</button>'}</div>`;el.querySelectorAll('input[data-pid]').forEach(inp=>inp.onchange=async()=>{try{await api(`/series/${id}/rounds/${r.id}/points/${inp.dataset.pid}`,{method:'PATCH',body:{points:Number(inp.value)}});CX.toast('積分已更新')}catch(e){CX.toast(e.message)}});const b=document.getElementById('confirm-points');if(b)b.onclick=async()=>{try{await api(`/series/${id}/rounds/${r.id}/points/confirm`,{method:'POST'});currentTab='points';selectedRoundId=r.id;await load();}catch(e){CX.toast(e.message)}}}
 async function load(){try{state=await api(`/series/${id}`);render();}catch(e){app.innerHTML=`<div class="error-box">${CX.esc(e.message)}</div>`}};
+// V42: use mutation responses to update the local round immediately; avoid an extra full-series GET.
+function applyRoundResponse(roundId, payload){
+  const round=(state?.rounds||[]).find(x=>x.id===roundId);
+  if(!round||!payload?.data)return false;
+  round.data=payload.data;
+  if(payload.status)round.status=payload.status;
+  else round.status=payload.data.champion?'done':'ongoing';
+  state.updatedAt=Date.now();
+  render();
+  return true;
+}
+
 document.getElementById('share').onclick=async()=>{try{const r=await api(`/series/${id}/share`,{method:'POST'});await CX.copy(location.origin+r.url);CX.toast('觀眾網址已複製');}catch(e){CX.toast(e.message)}};
 load();
 </script></body></html>
