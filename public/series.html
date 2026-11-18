@@ -66,8 +66,37 @@ let selectedRoundId=null;
 const app=document.getElementById('app');
 function api(path,opts={}){return CX.api(path,{...opts,controlToken:token});}
 function medal(rank){return ['🥇','🥈','🥉','4️⃣'][rank-1]||rank;}
+// V46：整頁重繪前保存視窗、賽程水平捲動及目前可見比賽的位置，避免 iPhone 操作後跳格。
+function captureControlScroll(){
+  const cards=[...app.querySelectorAll('.match-card[data-match-id]')];
+  const anchor=cards.find(el=>{const r=el.getBoundingClientRect();return r.bottom>0&&r.top<window.innerHeight;});
+  return {
+    y:window.scrollY||window.pageYOffset||0,
+    anchorId:anchor?.dataset.matchId||null,
+    anchorTop:anchor?anchor.getBoundingClientRect().top:null,
+    horizontal:[...app.querySelectorAll('.bracket-scroll')].map(el=>el.scrollLeft||0),
+    unified:[...app.querySelectorAll('.bracket-unified')].map(el=>el.scrollLeft||0)
+  };
+}
+function restoreControlScroll(saved){
+  if(!saved)return;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    const scrollers=[...app.querySelectorAll('.bracket-scroll')];
+    scrollers.forEach((el,i)=>{if(saved.horizontal[i]!==undefined)el.scrollLeft=saved.horizontal[i];});
+    const unified=[...app.querySelectorAll('.bracket-unified')];
+    unified.forEach((el,i)=>{if(saved.unified[i]!==undefined)el.scrollLeft=saved.unified[i];});
+    let targetY=saved.y;
+    if(saved.anchorId&&saved.anchorTop!==null){
+      const escaped=window.CSS?.escape?CSS.escape(saved.anchorId):saved.anchorId.replace(/[^a-zA-Z0-9_-]/g,'\\$&');
+      const anchor=app.querySelector(`.match-card[data-match-id=\"${escaped}\"]`);
+      if(anchor)targetY+=anchor.getBoundingClientRect().top-saved.anchorTop;
+    }
+    window.scrollTo({top:Math.max(0,targetY),left:window.scrollX||0,behavior:'instant'});
+  }));
+}
 function render(){
   if(!state)return;
+  const savedScroll=captureControlScroll();
   document.getElementById('title').textContent=state.name;
   const rounds=state.rounds||[], overall=state.overall||[];
   const accessCode=state.accessCode||'';
@@ -88,6 +117,7 @@ function render(){
   }
   document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>show(x.dataset.tab));
   show(currentTab);
+  restoreControlScroll(savedScroll);
 
   document.getElementById('copy-code').onclick=async()=>{CX.toast(await CX.copy(accessCode)?'活動代碼已複製':'複製失敗');};
   document.getElementById('undo').onclick=async()=>{
