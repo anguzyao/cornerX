@@ -255,12 +255,20 @@ function renderRound(el,r,rounds,active){
     if(btn.disabled)return;btn.disabled=true;btn.textContent='啟動中…';
     try{const result=await api(`/series/${id}/rounds/${r.id}/matches/${mid}/start`,{method:'POST'});currentTab='round';selectedRoundId=r.id;applyRoundResponse(r.id,{...result,status:r.status});CX.toast('比賽已開始');}
     catch(e){btn.disabled=false;btn.textContent='▶ 開始比賽';CX.toast(e.message);if(e.message.includes('另一位裁判'))await load();}
+  },onCall:async(mid,btn)=>{
+    const target=r.data.matches.find(m=>m.id===mid);if(!target)return;
+    if(btn.disabled)return;btn.disabled=true;btn.classList.add('is-sending');
+    try{
+      const order=callMatchOrder(r.data.matches).findIndex(m=>m.id===mid)+1;
+      await api(`/series/${id}/rounds/${r.id}/call`,{method:'POST',body:{matchId:mid,matchNo:order,playerA:target.playerA,playerB:target.playerB}});
+      btn.classList.remove('is-sending');btn.classList.add('is-called');btn.textContent='🔊';btn.title='已叫號，可再次播送';
+      CX.toast(`第 ${order} 場已發送叫號`);
+    }catch(e){btn.disabled=false;btn.classList.remove('is-sending');CX.toast(e.message)}
   },onRecord:async mid=>{
     const m=r.data.matches.find(x=>x.id===mid);if(!m)return;
     if(r.data.teamMode){CXBracket.openTeamScoreModal(m,r.data.teams,async(memberScores,scoreA,scoreB)=>{try{const result=await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{scoreA,scoreB,memberScores}});currentTab='round';selectedRoundId=r.id;if(result.status==='done')await load();else applyRoundResponse(r.id,result);}catch(e){CX.toast(e.message);throw e;}})}
     else CXBracket.openScoreModal(m,async(a,b)=>{try{const result=await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{scoreA:a,scoreB:b}});currentTab='round';selectedRoundId=r.id;if(result.status==='done')await load();else applyRoundResponse(r.id,result);}catch(e){CX.toast(e.message);throw e;}},async(slot)=>{try{const result=await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{winner:slot}});currentTab='round';selectedRoundId=r.id;if(result.status==='done')await load();else applyRoundResponse(r.id,result);}catch(e){CX.toast(e.message);throw e;}});
   }});
-  document.getElementById('bracket').appendChild(renderCallPanel(r));
 }
 function openManualSeedModal(r){
   const players=firstRoundPlayers(r);let order=players.slice();let first=null;

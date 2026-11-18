@@ -3,6 +3,7 @@
 
 const BYE = '__BYE__';
 let activeTeamMap = null;
+let activeCallHandler = null;
 
 function playerDisplayHtml(name) {
   const safeName = CX.esc(playerLabel(name));
@@ -81,7 +82,9 @@ function matchCardHtml(m, editable, orderMap, currentMatchId) {
   const isCurrent = currentMatchId === m.id;
   const cls = ['match-card', clickable ? 'clickable' : '', isCurrent ? 'current-match' : '', m.startedAt && m.status !== 'done' ? 'started-match' : '', m.status === 'done' ? 'completed-match' : ''].filter(Boolean).join(' ');
   const order = orderMap.get(m.id);
-  const orderHtml = order ? `<div class="match-order ${m.startedAt ? 'started' : isCurrent ? 'current' : ''}">${m.startedAt ? '● ' : isCurrent ? '▶ ' : ''}第 ${order} 場${m.startedAt ? ' · 比賽進行中' : isCurrent ? ' · 待開始' : ''}</div>` : '';
+  const orderState = m.status === 'done' ? 'completed' : m.startedAt ? 'started' : isCurrent ? 'current' : '';
+  const orderText = m.status === 'done' ? ' · 比賽完成' : m.startedAt ? ' · 比賽進行中' : isCurrent ? ' · 待開始' : '';
+  const orderHtml = order ? `<div class="match-order ${orderState}"><span> ${m.status === 'done' ? '✓ ' : m.startedAt ? '● ' : isCurrent ? '▶ ' : ''}第 ${order} 場${orderText}</span>${canStart ? `<button type="button" class="match-call-icon" data-call-match="${m.id}" aria-label="叫號第 ${order} 場" title="叫號">📢</button>` : ''}</div>` : '';
   const startHtml = canStart ? `<button type="button" class="match-start-btn" data-start-match="${m.id}">▶ 開始比賽</button>` : '';
   return `<div class="${cls}" data-match-id="${m.id}">${orderHtml}${rows.join('')}${startHtml}</div>`;
 }
@@ -215,6 +218,7 @@ function renderTreeBracket(wb, editable, orderMap, currentMatchId, currentMatch,
 
 function renderBracket(container, tData, opts) {
   const editable = !!opts.editable;
+  activeCallHandler = typeof opts.onCall === 'function' ? opts.onCall : null;
   activeTeamMap = tData.teamMode && tData.teams ? tData.teams : null;
   const matches = tData.matches;
   const orderMap = getMatchOrder(matches);
@@ -281,6 +285,7 @@ function renderBracket(container, tData, opts) {
   if (editable) {
     container.querySelectorAll('.match-card.clickable').forEach((el) => el.addEventListener('click', (event) => { if (event.target.closest('.match-start-btn')) return; opts.onRecord(el.dataset.matchId); }));
     container.querySelectorAll('.match-start-btn').forEach((btn) => btn.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); opts.onStart?.(btn.dataset.startMatch, btn); }));
+    container.querySelectorAll('.match-call-icon').forEach((btn) => btn.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); activeCallHandler?.(btn.dataset.callMatch, btn); }));
   }
   requestAnimationFrame(() => refreshBracketConnectors(container));
 }
