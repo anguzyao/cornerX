@@ -1192,3 +1192,18 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
 .match-call-icon.is-sending { opacity:.55; }
 .match-card.completed-match .match-order.completed { color:#36d98a; }
 @media(max-width:560px){ .match-call-icon{width:26px;height:24px;min-height:24px;flex-basis:26px;font-size:12px} }
+
+/* V46 — mobile gesture separation: page owns vertical scrolling;
+   bracket owns horizontal scrolling only. `clip` prevents the bracket
+   from becoming a nested vertical scroll container (unlike `visible`
+   when paired with overflow-x:auto). */
+.bracket-unified .bracket-scroll {
+  overflow-x: auto;
+  overflow-y: clip;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 24px;
+}
+/* Keep the whole document from rubber-banding horizontally. */
+html, body { overflow-x: clip; }
