@@ -58,9 +58,12 @@ function isPlayableMatch(m) {
 
 function findCurrentMatch(matches) {
   const orderMap = getMatchOrder(matches);
-  return matches
-    .filter((m) => m.status === 'ready' && isPlayableMatch(m))
-    .sort((a, b) => (orderMap.get(a.id) || 9999) - (orderMap.get(b.id) || 9999))[0] || null;
+  const started = matches.filter((m) => m.status === 'ready' && m.startedAt && isPlayableMatch(m));
+  const pool = started.length ? started : matches.filter((m) => m.status === 'ready' && !m.startedAt && isPlayableMatch(m));
+  return pool.sort((a, b) => {
+    if (started.length && a.startedAt !== b.startedAt) return String(a.startedAt).localeCompare(String(b.startedAt));
+    return (orderMap.get(a.id) || 9999) - (orderMap.get(b.id) || 9999);
+  })[0] || null;
 }
 
 function matchCardHtml(m, editable, orderMap, currentMatchId) {
@@ -74,11 +77,13 @@ function matchCardHtml(m, editable, orderMap, currentMatchId) {
     return `<div class="${cls}">${playerDisplayHtml(name)}${scoreHtml}</div>`;
   });
   const clickable = editable && m.status === 'ready' && isPlayableMatch(m);
+  const canStart = clickable && !m.startedAt;
   const isCurrent = currentMatchId === m.id;
-  const cls = ['match-card', clickable ? 'clickable' : '', isCurrent ? 'current-match' : '', m.status === 'done' ? 'completed-match' : ''].filter(Boolean).join(' ');
+  const cls = ['match-card', clickable ? 'clickable' : '', isCurrent ? 'current-match' : '', m.startedAt && m.status !== 'done' ? 'started-match' : '', m.status === 'done' ? 'completed-match' : ''].filter(Boolean).join(' ');
   const order = orderMap.get(m.id);
-  const orderHtml = order ? `<div class="match-order ${isCurrent ? 'current' : ''}">${isCurrent ? '▶ ' : ''}第 ${order} 場${isCurrent ? ' · 進行中' : ''}</div>` : '';
-  return `<div class="${cls}" data-match-id="${m.id}">${orderHtml}${rows.join('')}</div>`;
+  const orderHtml = order ? `<div class="match-order ${m.startedAt ? 'started' : isCurrent ? 'current' : ''}">${m.startedAt ? '● ' : isCurrent ? '▶ ' : ''}第 ${order} 場${m.startedAt ? ' · 比賽進行中' : isCurrent ? ' · 待開始' : ''}</div>` : '';
+  const startHtml = canStart ? `<button type="button" class="match-start-btn" data-start-match="${m.id}">▶ 開始比賽</button>` : '';
+  return `<div class="${cls}" data-match-id="${m.id}">${orderHtml}${rows.join('')}${startHtml}</div>`;
 }
 
 function isByeMatch(m) {
@@ -170,7 +175,7 @@ function nextPlayableMatch(matches, currentMatch) {
   if (!currentMatch) return null;
   const orderMap = getMatchOrder(matches);
   return matches
-    .filter(m => m.status === 'ready' && isPlayableMatch(m) && m.id !== currentMatch.id)
+    .filter(m => m.status === 'ready' && !m.startedAt && isPlayableMatch(m) && m.id !== currentMatch.id)
     .sort((a,b) => (orderMap.get(a.id)||9999) - (orderMap.get(b.id)||9999))[0] || null;
 }
 
@@ -273,7 +278,10 @@ function renderBracket(container, tData, opts) {
   html += `</div>`;
 
   container.innerHTML = html;
-  if (editable) container.querySelectorAll('.match-card.clickable').forEach((el) => el.addEventListener('click', () => opts.onRecord(el.dataset.matchId)));
+  if (editable) {
+    container.querySelectorAll('.match-card.clickable').forEach((el) => el.addEventListener('click', (event) => { if (event.target.closest('.match-start-btn')) return; opts.onRecord(el.dataset.matchId); }));
+    container.querySelectorAll('.match-start-btn').forEach((btn) => btn.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); opts.onStart?.(btn.dataset.startMatch, btn); }));
+  }
   requestAnimationFrame(() => refreshBracketConnectors(container));
 }
 

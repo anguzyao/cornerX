@@ -369,6 +369,13 @@ app.get('/api/series/:id', async (c) => {
   return c.json({ ...payload, controlToken: controlToken(c), accessCode, shareSlug: row.share_slug, readOnly: false });
 });
 
+app.get('/api/series/:id/changes', async (c) => {
+  const row = await loadOwnedSeries(c);
+  if (!row || row.id !== c.req.param('id')) return jsonError(c, 404, '找不到這個活動，或私人控制連結無效');
+  const { results } = await c.env.DB.prepare('SELECT id, round_no, status, updated_at FROM series_rounds WHERE series_id = ? ORDER BY round_no').bind(row.id).all();
+  return c.json({ rounds: results });
+});
+
 app.post('/api/series/access', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const code = String(body.code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -456,10 +463,14 @@ async function loadOwnedRound(c) {
 async function saveRoundAndMaybePoints(c, seriesRow, roundRow, data, previousSnapshot = null) {
   const now = new Date().toISOString();
   const status = data.champion ? 'done' : 'ongoing';
+  // Optimistic concurrency guard: only one judge can commit against a given version.
+  // A stale judge receives 409 and refreshes instead of overwriting another court's result.
+  const update = await c.env.DB.prepare('UPDATE series_rounds SET data = ?, status = ?, updated_at = ? WHERE id = ? AND updated_at = ?')
+    .bind(JSON.stringify(data), status, now, roundRow.id, roundRow.updated_at).run();
+  if (!(update.meta?.changes > 0)) throw new Error('另一位裁判剛更新了賽程，已保護最新資料。請重新整理後再提交。');
   if (previousSnapshot) {
     await c.env.DB.prepare('INSERT INTO series_round_actions (id, round_id, snapshot, created_at) VALUES (?,?,?,?)').bind(newId('act'), roundRow.id, previousSnapshot, now).run();
   }
-  await c.env.DB.prepare('UPDATE series_rounds SET data = ?, status = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), status, now, roundRow.id).run();
   await c.env.DB.prepare('UPDATE series SET status = ?, updated_at = ? WHERE id = ?').bind('ongoing', now, seriesRow.id).run();
   if (data.champion) {
     const ranking = buildRoundRanking(data);
@@ -508,7 +519,7 @@ app.post('/api/series/:id/rounds/:roundId/reseed', async (c) => {
   if (!series || !round) return jsonError(c, 404, '找不到這場比賽');
   const current = JSON.parse(round.data);
   if (current.teamMode) return jsonError(c, 400, '團體賽目前不支援直接重抽對位；請在建立時重新分隊。');
-  const hasPlayedMatch = (current.matches || []).some((m) => m.status === 'done' && m.winner && m.playerA !== '__BYE__' && m.playerB !== '__BYE__');
+  const hasPlayedMatch = (current.matches || []).some((m) => (m.startedAt || (m.status === 'done' && m.winner)) && m.playerA !== '__BYE__' && m.playerB !== '__BYE__');
   if (hasPlayedMatch) return jsonError(c, 400, '已有比賽結果，賽程對位已鎖定');
 
   const body = await c.req.json().catch(() => ({}));
@@ -556,73 +567,109 @@ app.post('/api/series/:id/rounds/:roundId/reseed', async (c) => {
   return c.json({ ok: true, data });
 });
 
-app.post('/api/series/:id/rounds/:roundId/matches/:matchId/result', async (c) => {
-  const { series, round } = await loadOwnedRound(c);
-  if (!series || !round) return jsonError(c, 404, '找不到這場比賽');
-  const body = await c.req.json().catch(() => ({}));
-  const data = JSON.parse(round.data);
-  const previousSnapshot = JSON.stringify(data);
-  try {
-    if (data.teamMode && body.memberScores && (body.winner !== 'A' && body.winner !== 'B')) {
-      const match = data.matches.find((m) => m.id === c.req.param('matchId'));
-      if (!match) throw new Error('找不到這場對戰');
-      const teamA = data.teams?.[match.playerA];
-      const teamB = data.teams?.[match.playerB];
-      if (!teamA || !teamB) throw new Error('隊伍資料不完整');
-      const sumFor = (team) => team.members.reduce((sum, name) => {
-        const n = Number(body.memberScores[name]);
-        if (!Number.isFinite(n) || n < 0) throw new Error(`請輸入 ${name} 的有效比分`);
-        return sum + n;
-      }, 0);
-      const sumA = sumFor(teamA), sumB = sumFor(teamB);
-      if (sumA === sumB) throw new Error('兩隊總分相同，請依活動規則處理平手後再記錄');
-      recordResult(data, match.id, sumA, sumB);
-      const savedMatch = data.matches.find((m) => m.id === match.id);
-      savedMatch.memberScores = { ...body.memberScores };
-    } else if (body.winner === 'A' || body.winner === 'B') {
-      recordWinner(data, c.req.param('matchId'), body.winner);
-    } else {
-      recordResult(data, c.req.param('matchId'), Number(body.scoreA), Number(body.scoreB));
+app.post('/api/series/:id/rounds/:roundId/matches/:matchId/start', async (c) => {
+  const { series, round: initialRound } = await loadOwnedRound(c);
+  if (!series || !initialRound) return jsonError(c, 404, '找不到這場比賽');
+  const matchId = c.req.param('matchId');
+  // Retry against the newest round snapshot so three judges can start different matches concurrently.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const round = attempt === 0 ? initialRound : await c.env.DB.prepare('SELECT * FROM series_rounds WHERE id = ? AND series_id = ?').bind(initialRound.id, series.id).first();
+    if (!round) return jsonError(c, 404, '找不到這場比賽');
+    const data = JSON.parse(round.data);
+    const match = (data.matches || []).find((m) => m.id === matchId);
+    if (!match || match.status !== 'ready' || !match.playerA || !match.playerB || match.playerA === '__BYE__' || match.playerB === '__BYE__') return jsonError(c, 400, '這場比賽目前無法開始');
+    if (match.startedAt) return c.json({ ok: true, alreadyStarted: true, data });
+    const previousSnapshot = round.data;
+    const now = new Date().toISOString();
+    match.startedAt = now;
+    match.live = true;
+    const result = await c.env.DB.prepare('UPDATE series_rounds SET data = ?, updated_at = ? WHERE id = ? AND updated_at = ?')
+      .bind(JSON.stringify(data), now, round.id, round.updated_at).run();
+    if (result.meta?.changes > 0) {
+      await c.env.DB.prepare('INSERT INTO series_round_actions (id, round_id, snapshot, created_at) VALUES (?,?,?,?)').bind(newId('act'), round.id, previousSnapshot, now).run();
+      await c.env.DB.prepare('UPDATE series SET updated_at = ? WHERE id = ?').bind(now, series.id).run();
+      return c.json({ ok: true, data });
     }
-  } catch (e) { return jsonError(c, 400, e.message); }
-  const status = await saveRoundAndMaybePoints(c, series, round, data, previousSnapshot);
-  return c.json({ id: round.id, status, data });
+  }
+  return jsonError(c, 409, '其他裁判正在更新賽程，請稍候再試。');
+});
+
+app.post('/api/series/:id/rounds/:roundId/matches/:matchId/result', async (c) => {
+  const { series, round: initialRound } = await loadOwnedRound(c);
+  if (!series || !initialRound) return jsonError(c, 404, '找不到這場比賽');
+  const body = await c.req.json().catch(() => ({}));
+  const matchId = c.req.param('matchId');
+  // Re-read and re-apply the requested result when another court commits first.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const round = attempt === 0 ? initialRound : await c.env.DB.prepare('SELECT * FROM series_rounds WHERE id = ? AND series_id = ?').bind(initialRound.id, series.id).first();
+    if (!round) return jsonError(c, 404, '找不到這場比賽');
+    const data = JSON.parse(round.data);
+    const previousSnapshot = round.data;
+    try {
+      if (data.teamMode && body.memberScores && (body.winner !== 'A' && body.winner !== 'B')) {
+        const match = data.matches.find((m) => m.id === matchId);
+        if (!match) throw new Error('找不到這場對戰');
+        if (match.status === 'done') throw new Error('這場比賽已經完成，請重新整理確認結果');
+        const teamA = data.teams?.[match.playerA];
+        const teamB = data.teams?.[match.playerB];
+        if (!teamA || !teamB) throw new Error('隊伍資料不完整');
+        const sumFor = (team) => team.members.reduce((sum, name) => {
+          const n = Number(body.memberScores[name]);
+          if (!Number.isFinite(n) || n < 0) throw new Error(`請輸入 ${name} 的有效比分`);
+          return sum + n;
+        }, 0);
+        const sumA = sumFor(teamA), sumB = sumFor(teamB);
+        if (sumA === sumB) throw new Error('兩隊總分相同，請依活動規則處理平手後再記錄');
+        recordResult(data, match.id, sumA, sumB);
+        const savedMatch = data.matches.find((m) => m.id === match.id);
+        savedMatch.memberScores = { ...body.memberScores };
+      } else if (body.winner === 'A' || body.winner === 'B') {
+        recordWinner(data, matchId, body.winner);
+      } else {
+        recordResult(data, matchId, Number(body.scoreA), Number(body.scoreB));
+      }
+    } catch (e) { return jsonError(c, 400, e.message); }
+    const completedMatch = data.matches.find((m) => m.id === matchId);
+    if (completedMatch) { completedMatch.live = false; completedMatch.completedAt = new Date().toISOString(); }
+    try {
+      const status = await saveRoundAndMaybePoints(c, series, round, data, previousSnapshot);
+      return c.json({ id: round.id, status, data });
+    } catch (e) {
+      if (String(e.message || '').includes('另一位裁判剛更新')) continue;
+      return jsonError(c, 409, e.message);
+    }
+  }
+  return jsonError(c, 409, '其他裁判正在更新賽程，請稍候再提交一次。');
 });
 
 app.post('/api/series/:id/rounds/:roundId/call', async (c) => {
-  const { series, round } = await loadOwnedRound(c);
-  if (!series || !round) return jsonError(c, 404, '找不到這場比賽');
+  const { series, round: initialRound } = await loadOwnedRound(c);
+  if (!series || !initialRound) return jsonError(c, 404, '找不到這場比賽');
   const body = await c.req.json().catch(() => ({}));
   const matchId = String(body.matchId || '').trim();
   const playerA = String(body.playerA || '').trim();
   const playerB = String(body.playerB || '').trim();
   const matchNo = Number(body.matchNo || 0);
   if (!matchId || !playerA || !playerB || !matchNo) return jsonError(c, 400, '叫號資料不完整');
-
-  const data = JSON.parse(round.data);
-  const match = (data.matches || []).find((m) => m.id === matchId);
-  if (!match || match.status !== 'ready' || !match.playerA || !match.playerB || match.playerA === '__BYE__' || match.playerB === '__BYE__') {
-    return jsonError(c, 400, '這場比賽目前無法叫號');
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const round = attempt === 0 ? initialRound : await c.env.DB.prepare('SELECT * FROM series_rounds WHERE id = ? AND series_id = ?').bind(initialRound.id, series.id).first();
+    if (!round) return jsonError(c, 404, '找不到這場比賽');
+    const data = JSON.parse(round.data);
+    const match = (data.matches || []).find((m) => m.id === matchId);
+    if (!match || match.status !== 'ready' || match.startedAt || !match.playerA || !match.playerB || match.playerA === '__BYE__' || match.playerB === '__BYE__') return jsonError(c, 400, '這場比賽目前無法叫號');
+    const createdAt = new Date().toISOString();
+    const newCall = { id: newId('call'), matchId, matchNo, playerA, playerB,
+      membersA: data.teamMode ? (data.teams?.[playerA]?.members || []) : [],
+      membersB: data.teamMode ? (data.teams?.[playerB]?.members || []) : [], createdAt };
+    const calls = Array.isArray(data.calls) ? data.calls.slice() : (data.call ? [data.call] : []);
+    calls.push(newCall); data.calls = calls.slice(-100); delete data.call;
+    const updated = await c.env.DB.prepare('UPDATE series_rounds SET data = ?, updated_at = ? WHERE id = ? AND updated_at = ?').bind(JSON.stringify(data), createdAt, round.id, round.updated_at).run();
+    if (updated.meta?.changes > 0) {
+      await c.env.DB.prepare('UPDATE series SET updated_at = ? WHERE id = ?').bind(createdAt, series.id).run();
+      return c.json({ ok: true, call: { ...newCall, roundId: round.id } });
+    }
   }
-
-  const createdAt = new Date().toISOString();
-  const newCall = {
-    id: newId('call'),
-    matchId,
-    matchNo,
-    playerA,
-    playerB,
-    membersA: data.teamMode ? (data.teams?.[playerA]?.members || []) : [],
-    membersB: data.teamMode ? (data.teams?.[playerB]?.members || []) : [],
-    createdAt,
-  };
-  const calls = Array.isArray(data.calls) ? data.calls.slice() : (data.call ? [data.call] : []);
-  calls.push(newCall);
-  data.calls = calls.slice(-100);
-  delete data.call;
-  await c.env.DB.prepare('UPDATE series_rounds SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), createdAt, round.id).run();
-  await c.env.DB.prepare('UPDATE series SET updated_at = ? WHERE id = ?').bind(createdAt, series.id).run();
-  return c.json({ ok: true, call: { ...newCall, roundId: round.id } });
+  return jsonError(c, 409, '其他裁判正在更新賽程，請稍候再叫號。');
 });
 
 app.post('/api/series/:id/rounds/:roundId/undo', async (c) => {

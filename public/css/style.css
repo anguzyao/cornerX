@@ -1149,3 +1149,29 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
 .call-team-members{font-size:12px;margin-top:3px}
 .call-modal .call-team-members{font-size:14px;margin-top:0;margin-bottom:7px}
 @media(max-width:560px){.call-team-players{gap:5px}.call-team-members{font-size:11px}.match-row .team-members{font-size:9px}}
+
+
+/* V44 — concurrent courts: all started matches receive orange live outline */
+.match-card.started-match {
+  border-color: #ff9b35 !important;
+  box-shadow: 0 0 0 1px rgba(255,155,53,.55), 0 0 14px rgba(255,155,53,.28), 0 0 28px rgba(255,155,53,.16) !important;
+  animation: cx-started-match-pulse 1.35s ease-in-out infinite;
+  position: relative;
+  z-index: 2;
+}
+.match-card.started-match .match-order.started {
+  color: #ffc078;
+  background: linear-gradient(90deg, rgba(255,155,53,.18), rgba(255,107,44,.12));
+}
+.match-start-btn {
+  display:block; width:calc(100% - 16px); margin:8px; min-height:38px;
+  border:1px solid rgba(74,168,255,.55); border-radius:8px;
+  background:rgba(74,168,255,.12); color:var(--text); font-weight:800;
+  cursor:pointer;
+}
+.match-start-btn:disabled { opacity:.65; cursor:wait; }
+@keyframes cx-started-match-pulse {
+  0%,100% { box-shadow:0 0 0 1px rgba(255,155,53,.42),0 0 10px rgba(255,155,53,.20); }
+  50% { box-shadow:0 0 0 2px rgba(255,155,53,.82),0 0 22px rgba(255,155,53,.42),0 0 34px rgba(255,107,44,.20); }
+}
+@media (prefers-reduced-motion:reduce) { .match-card.started-match { animation:none; } }

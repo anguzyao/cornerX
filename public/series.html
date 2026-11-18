@@ -202,7 +202,7 @@ function callMatchOrder(matches){
     });
 }
 function getCallCandidates(r){
-  return callMatchOrder(r?.data?.matches||[]).filter(m=>m.status==='ready');
+  return callMatchOrder(r?.data?.matches||[]).filter(m=>m.status==='ready'&&!m.startedAt);
 }
 function renderCallPanel(r){
   const box=document.createElement('div'); box.className='call-panel';
@@ -235,7 +235,7 @@ function renderCallPanel(r){
 function renderRound(el,r,rounds,active){
   if(!r){el.innerHTML='<div class="empty-state">尚未建立賽程</div>';return}
   const editable=r.status!=='done';
-  const hasPlayed=(r.data?.matches||[]).some(m=>m.status==='done'&&m.winner&&m.playerA!=='__BYE__'&&m.playerB!=='__BYE__');
+  const hasPlayed=(r.data?.matches||[]).some(m=>(m.startedAt||(m.status==='done'&&m.winner))&&m.playerA!=='__BYE__'&&m.playerB!=='__BYE__');
   const canReseed=editable&&!hasPlayed&&!r.data?.teamMode;
   el.innerHTML=`<div class="panel"><div class="round-switcher">${rounds.map(x=>`<button class="round-chip ${x.id===r.id?'active':''}" data-round-id="${x.id}">第${x.round_no}場${x.status==='done'?' ✓':' · 進行中'}</button>`).join('')}</div><div class="round-head"><div><div class="eyebrow">ROUND ${r.round_no}</div><h3>${CX.esc(r.name)}</h3></div><span class="badge ${r.status==='done'?'done':'ongoing'}">${r.status==='done'?'已完成':'進行中'}</span></div><div class="round-management-actions">${canReseed?`<button class="btn btn-secondary btn-sm" id="randomize">🎲 隨機排序</button><button class="btn btn-secondary btn-sm" id="manual-seed">⚙ 手動調整對位</button>`:(!r.data?.teamMode&&!editable||hasPlayed?'<span class="bracket-lock-hint">🔒 已有比賽結果，對位已鎖定</span>':'')}<button class="btn btn-danger btn-sm" id="delete-round">🗑 刪除此場比賽</button></div><div id="bracket"></div></div>`;
   el.querySelectorAll('.round-chip').forEach(btn=>btn.onclick=()=>{selectedRoundId=btn.dataset.roundId;render();});
@@ -251,7 +251,11 @@ function renderRound(el,r,rounds,active){
     };
     document.getElementById('manual-seed').onclick=()=>openManualSeedModal(r);
   }
-  CXBracket.renderBracket(document.getElementById('bracket'),r.data,{editable:editable,onRecord:async mid=>{
+  CXBracket.renderBracket(document.getElementById('bracket'),r.data,{editable:editable,onStart:async(mid,btn)=>{
+    if(btn.disabled)return;btn.disabled=true;btn.textContent='啟動中…';
+    try{const result=await api(`/series/${id}/rounds/${r.id}/matches/${mid}/start`,{method:'POST'});currentTab='round';selectedRoundId=r.id;applyRoundResponse(r.id,{...result,status:r.status});CX.toast('比賽已開始');}
+    catch(e){btn.disabled=false;btn.textContent='▶ 開始比賽';CX.toast(e.message);if(e.message.includes('另一位裁判'))await load();}
+  },onRecord:async mid=>{
     const m=r.data.matches.find(x=>x.id===mid);if(!m)return;
     if(r.data.teamMode){CXBracket.openTeamScoreModal(m,r.data.teams,async(memberScores,scoreA,scoreB)=>{try{const result=await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{scoreA,scoreB,memberScores}});currentTab='round';selectedRoundId=r.id;if(result.status==='done')await load();else applyRoundResponse(r.id,result);}catch(e){CX.toast(e.message);throw e;}})}
     else CXBracket.openScoreModal(m,async(a,b)=>{try{const result=await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{scoreA:a,scoreB:b}});currentTab='round';selectedRoundId=r.id;if(result.status==='done')await load();else applyRoundResponse(r.id,result);}catch(e){CX.toast(e.message);throw e;}},async(slot)=>{try{const result=await api(`/series/${id}/rounds/${r.id}/matches/${mid}/result`,{method:'POST',body:{winner:slot}});currentTab='round';selectedRoundId=r.id;if(result.status==='done')await load();else applyRoundResponse(r.id,result);}catch(e){CX.toast(e.message);throw e;}});
@@ -269,7 +273,21 @@ function openManualSeedModal(r){
   mask.querySelector('#seed-save').onclick=async()=>{const btn=mask.querySelector('#seed-save');btn.disabled=true;btn.textContent='儲存中…';try{const result=await api(`/series/${id}/rounds/${r.id}/reseed`,{method:'POST',body:{mode:'manual',players:order}});close();currentTab='round';selectedRoundId=r.id;applyRoundResponse(r.id,result);CX.toast('對位已更新');}catch(e){btn.disabled=false;btn.textContent='確認對位';CX.toast(e.message)}};
 }
 async function renderPoints(el,r){if(!r||r.status!=='done'){el.innerHTML='<div class="empty-state">本場完成後會自動產生積分</div>';return} const q=await api(`/series/${id}/rounds/${r.id}/points`);el.innerHTML=`<div class="panel"><div class="section-title">${CX.esc(r.name)} · 積分</div><div class="hint">系統依排名自動帶入，你可以在鎖定前手動修改。</div><div class="points-list">${q.points.map(x=>`<div class="point-row"><span class="rank">${medal(x.rank)}</span><span class="player">${CX.esc(x.name)}</span><input data-pid="${x.participant_id}" type="number" min="0" value="${x.points}" ${q.locked?'disabled':''}><span class="source">${x.source==='manual'?'手動':'自動'}</span></div>`).join('')}</div>${q.locked?'<div class="locked">🔒 本場積分已鎖定</div>':'<button class="btn btn-primary" id="confirm-points">確認並鎖定本場積分</button>'}</div>`;el.querySelectorAll('input[data-pid]').forEach(inp=>inp.onchange=async()=>{try{await api(`/series/${id}/rounds/${r.id}/points/${inp.dataset.pid}`,{method:'PATCH',body:{points:Number(inp.value)}});CX.toast('積分已更新')}catch(e){CX.toast(e.message)}});const b=document.getElementById('confirm-points');if(b)b.onclick=async()=>{try{await api(`/series/${id}/rounds/${r.id}/points/confirm`,{method:'POST'});currentTab='points';selectedRoundId=r.id;await load();}catch(e){CX.toast(e.message)}}}
-async function load(){try{state=await api(`/series/${id}`);render();}catch(e){app.innerHTML=`<div class="error-box">${CX.esc(e.message)}</div>`}};
+async function load(){try{state=await api(`/series/${id}`);cxLastVersion=roundVersion(state.rounds);render();}catch(e){app.innerHTML=`<div class="error-box">${CX.esc(e.message)}</div>`}};
+let cxSyncBusy=false, cxLastVersion='';
+function roundVersion(rows){return (rows||[]).map(r=>`${r.id}:${r.updated_at||''}:${r.status||''}`).join('|')}
+async function syncOtherJudges(){
+  if(cxSyncBusy||document.hidden||document.querySelector('.modal-mask,.round-create-mask,.manual-seed-modal'))return;
+  cxSyncBusy=true;
+  try{
+    const latest=await api(`/series/${id}/changes`);
+    const version=roundVersion(latest.rounds);
+    if(cxLastVersion && version!==cxLastVersion) await load();
+    cxLastVersion=version;
+  }catch(e){/* 背景同步失敗不打斷裁判操作；下次輪詢再試 */}
+  finally{cxSyncBusy=false;}
+}
+setInterval(syncOtherJudges,5000);
 // V42: use mutation responses to update the local round immediately; avoid an extra full-series GET.
 function applyRoundResponse(roundId, payload){
   const round=(state?.rounds||[]).find(x=>x.id===roundId);
