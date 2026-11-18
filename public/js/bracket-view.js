@@ -281,13 +281,29 @@ function renderBracket(container, tData, opts) {
   }
   html += `</div>`;
 
+  // V47：重新繪製賽程前保存頁面垂直位置與每個賽程區塊的水平位置，
+  // 避免開始比賽、記錄勝負或叫號後，手機畫面跳回賽程最左側／頁面頂端。
+  const pageScrollY = window.scrollY;
+  const bracketScrollPositions = Array.from(container.querySelectorAll('.bracket-scroll'))
+    .map((el) => el.scrollLeft);
+
   container.innerHTML = html;
   if (editable) {
     container.querySelectorAll('.match-card.clickable').forEach((el) => el.addEventListener('click', (event) => { if (event.target.closest('.match-start-btn')) return; opts.onRecord(el.dataset.matchId); }));
     container.querySelectorAll('.match-start-btn').forEach((btn) => btn.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); opts.onStart?.(btn.dataset.startMatch, btn); }));
     container.querySelectorAll('.match-call-icon').forEach((btn) => btn.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); activeCallHandler?.(btn.dataset.callMatch, btn); }));
   }
-  requestAnimationFrame(() => refreshBracketConnectors(container));
+  requestAnimationFrame(() => {
+    const newScrollers = Array.from(container.querySelectorAll('.bracket-scroll'));
+    newScrollers.forEach((el, index) => {
+      if (bracketScrollPositions[index] !== undefined) {
+        el.scrollLeft = bracketScrollPositions[index];
+      }
+    });
+    // 不使用 smooth，避免 iOS 在重繪後產生二次滑動或慣性跳動。
+    window.scrollTo(0, pageScrollY);
+    refreshBracketConnectors(container);
+  });
 }
 
 // ---------- 比分輸入 modal ----------

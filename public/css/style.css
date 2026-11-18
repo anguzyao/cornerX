@@ -964,7 +964,15 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
 .cx-tree-desktop,
 .cx-tree-mobile { display:none !important; }
 .bracket-unified { display:block; }
-.bracket-unified .bracket-scroll { overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch; padding-bottom:18px; }
+.bracket-unified .bracket-scroll {
+  overflow-x:auto;
+  overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-x pan-y;
+  overscroll-behavior-x:contain;
+  padding-bottom:56px;
+  margin-bottom:10px;
+}
 .bracket-unified .bracket { min-width:max-content; }
 
 /* Live Control：目前進行中的比賽使用橘黃色閃爍框線。 */
@@ -1193,17 +1201,8 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity
 .match-card.completed-match .match-order.completed { color:#36d98a; }
 @media(max-width:560px){ .match-call-icon{width:26px;height:24px;min-height:24px;flex-basis:26px;font-size:12px} }
 
-/* V46 — mobile gesture separation: page owns vertical scrolling;
-   bracket owns horizontal scrolling only. `clip` prevents the bracket
-   from becoming a nested vertical scroll container (unlike `visible`
-   when paired with overflow-x:auto). */
-.bracket-unified .bracket-scroll {
-  overflow-x: auto;
-  overflow-y: clip;
-  touch-action: pan-x pan-y;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 24px;
+
+/* V47：賽程容器底部留白，避免最後一張卡片與連線陰影被水平捲動視窗裁切。 */
+.bracket-unified .bracket-scroll > .bracket {
+  padding-bottom: 8px;
 }
-/* Keep the whole document from rubber-banding horizontally. */
-html, body { overflow-x: clip; }
