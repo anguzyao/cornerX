@@ -4,6 +4,53 @@
 const BYE = '__BYE__';
 let activeTeamMap = null;
 let activeCallHandler = null;
+let lastBracketInteraction = null;
+
+function getScrollParents(element) {
+  const parents = [];
+  let node = element?.parentElement;
+  while (node && node !== document.body && node !== document.documentElement) {
+    const style = getComputedStyle(node);
+    if (/(auto|scroll|overlay)/.test(style.overflowY) || /(auto|scroll|overlay)/.test(style.overflowX)) {
+      parents.push({ node, top: node.scrollTop, left: node.scrollLeft });
+    }
+    node = node.parentElement;
+  }
+  const scrolling = document.scrollingElement || document.documentElement;
+  if (!parents.some((p) => p.node === scrolling)) parents.push({ node: scrolling, top: scrolling.scrollTop, left: scrolling.scrollLeft });
+  return parents;
+}
+
+function rememberBracketInteraction(matchId, element) {
+  const card = element?.closest?.('.match-card') ||
+    (matchId ? document.querySelector(`.match-card[data-match-id="${CSS.escape(matchId)}"]`) : null);
+  const rect = card?.getBoundingClientRect();
+  lastBracketInteraction = {
+    matchId: matchId || card?.dataset.matchId || null,
+    cardTop: rect ? rect.top : null,
+    parents: getScrollParents(card || document.querySelector('.bracket-unified'))
+  };
+}
+
+function restoreBracketPosition(container, saved) {
+  if (!saved) return;
+  const restore = () => {
+    saved.parents.forEach(({ node, top, left }) => {
+      if (node?.isConnected) { node.scrollTop = top; node.scrollLeft = left; }
+    });
+    if (saved.matchId && Number.isFinite(saved.cardTop)) {
+      const card = container.querySelector(`.match-card[data-match-id="${CSS.escape(saved.matchId)}"]`);
+      if (card) {
+        const delta = card.getBoundingClientRect().top - saved.cardTop;
+        if (Math.abs(delta) > 1) {
+          const scroller = document.scrollingElement || document.documentElement;
+          scroller.scrollTop += delta;
+        }
+      }
+    }
+  };
+  requestAnimationFrame(() => { restore(); requestAnimationFrame(restore); });
+}
 
 function playerDisplayHtml(name) {
   const safeName = CX.esc(playerLabel(name));
@@ -281,27 +328,38 @@ function renderBracket(container, tData, opts) {
   }
   html += `</div>`;
 
-  // V47：重新繪製賽程前保存頁面垂直位置與每個賽程區塊的水平位置，
-  // 避免開始比賽、記錄勝負或叫號後，手機畫面跳回賽程最左側／頁面頂端。
-  const pageScrollY = window.scrollY;
-  const bracketScrollPositions = Array.from(container.querySelectorAll('.bracket-scroll'))
-    .map((el) => el.scrollLeft);
+  // V48：保存所有實際捲動容器與操作卡片的視覺位置。
+  const positionSnapshot = {
+    parents: getScrollParents(container),
+    matchId: lastBracketInteraction?.matchId || null,
+    cardTop: lastBracketInteraction?.cardTop ?? null,
+    bracketScrollPositions: Array.from(container.querySelectorAll('.bracket-scroll')).map((el) => el.scrollLeft)
+  };
 
   container.innerHTML = html;
   if (editable) {
-    container.querySelectorAll('.match-card.clickable').forEach((el) => el.addEventListener('click', (event) => { if (event.target.closest('.match-start-btn')) return; opts.onRecord(el.dataset.matchId); }));
-    container.querySelectorAll('.match-start-btn').forEach((btn) => btn.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); opts.onStart?.(btn.dataset.startMatch, btn); }));
-    container.querySelectorAll('.match-call-icon').forEach((btn) => btn.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); activeCallHandler?.(btn.dataset.callMatch, btn); }));
+    container.querySelectorAll('.match-card.clickable').forEach((el) => el.addEventListener('click', (event) => {
+      if (event.target.closest('.match-start-btn, .match-call-icon')) return;
+      rememberBracketInteraction(el.dataset.matchId, el);
+      opts.onRecord(el.dataset.matchId);
+    }));
+    container.querySelectorAll('.match-start-btn').forEach((btn) => btn.addEventListener('click', (event) => {
+      event.preventDefault(); event.stopPropagation();
+      rememberBracketInteraction(btn.dataset.startMatch, btn);
+      opts.onStart?.(btn.dataset.startMatch, btn);
+    }));
+    container.querySelectorAll('.match-call-icon').forEach((btn) => btn.addEventListener('click', (event) => {
+      event.preventDefault(); event.stopPropagation();
+      rememberBracketInteraction(btn.dataset.callMatch, btn);
+      activeCallHandler?.(btn.dataset.callMatch, btn);
+    }));
   }
   requestAnimationFrame(() => {
     const newScrollers = Array.from(container.querySelectorAll('.bracket-scroll'));
     newScrollers.forEach((el, index) => {
-      if (bracketScrollPositions[index] !== undefined) {
-        el.scrollLeft = bracketScrollPositions[index];
-      }
+      if (positionSnapshot.bracketScrollPositions[index] !== undefined) el.scrollLeft = positionSnapshot.bracketScrollPositions[index];
     });
-    // 不使用 smooth，避免 iOS 在重繪後產生二次滑動或慣性跳動。
-    window.scrollTo(0, pageScrollY);
+    restoreBracketPosition(container, positionSnapshot);
     refreshBracketConnectors(container);
   });
 }
